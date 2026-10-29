@@ -228,13 +228,14 @@ class CandidateTransformCoordinatorTest {
 
     @Test
     fun `T9 前导空格文本作为精确 key`() {
+        // t9Engine[2] 原注释 "hello"；覆盖用不同值，key 应保留前导空格不 trim
         val outcome = CandidateTransformCoordinator.foldT9Response(
             items = listOf(
-                CandidateTransformItem(engineIndex = 2, text = null, comment = "hello"),
+                CandidateTransformItem(engineIndex = 2, text = null, comment = "注释测试"),
             ),
             engineCandidates = t9Engine,
         )
-        assertEquals(mapOf(" hello" to "hello"), outcome.commentOverrides)
+        assertEquals(mapOf(" hello" to "注释测试"), outcome.commentOverrides)
     }
 
     @Test
