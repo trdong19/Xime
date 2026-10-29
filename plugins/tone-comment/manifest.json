@@ -1,0 +1,27 @@
+// =============================================
+// 拼音声调标注插件清单（宽松 JSON：支持 // 注释）
+// =============================================
+{
+  // 插件唯一标识
+  "id": "me.trdong.xime.plugin.tone_comment",
+
+  "name": "拼音声调标注",
+  "icon": "🎵",
+  "description": "候选词注释显示带声调拼音（nǐ hǎo 而非 ni hao）。基于内置常用字表精确标注，完全离线、不联网。当前版本在全键盘模式下生效；九键（T9）候选面板暂不支持注释渲染，待上游支持。",
+
+  "version": "0.1.0",
+
+  // 类型必须为 tool（candidate_transform 能力的合理类型白名单）
+  "type": "tool",
+
+  "entry": "main.js",
+
+  "platforms": ["android"],
+
+  "minHostVersion": "3.0.0",
+
+  // 能力声明：候选词变换（首个 hotPath 能力，15ms 硬超时）
+  "capabilities": {
+    "candidate_transform": true
+  }
+}

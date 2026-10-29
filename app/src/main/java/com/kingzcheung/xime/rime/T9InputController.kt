@@ -39,12 +39,13 @@ import kotlinx.coroutines.runBlocking
  */
 class T9InputController(
     private val rimeEngine: RimeEngine = RimeEngine.getInstance(),
-    private val onCompositionRefresh: ((RimeComposition, List<com.kingzcheung.xime.service.T9CandidateInjection>) -> Unit)? = null,
+    private val onCompositionRefresh: ((RimeComposition, com.kingzcheung.xime.service.T9TransformOutcome?) -> Unit)? = null,
     private val onRightCommitUndone: ((Int) -> Unit)? = null,
     /** 候选词变换（hotPath 插件能力）：后台取数后、post 主线程前同步调用
-     *  （阻塞至多 15ms，主线程零等待）；返回带引擎锚点的插件候选注入列表
-     *  （text 追加项），引擎结果原样使用（T9 不支持引擎引用替换）。null = 不干预。 */
-    private val candidateTransform: ((RimeProcessResult) -> List<com.kingzcheung.xime.service.T9CandidateInjection>?)? = null,
+     *  （阻塞至多 15ms，主线程零等待）；返回插件候选注入列表（text 追加项）
+     *  与引擎候选注释覆盖（按候选文本匹配，供 applyComposition T9 分支回填
+     *  显示注释）。null = 不干预。 */
+    private val candidateTransform: ((RimeProcessResult) -> com.kingzcheung.xime.service.T9TransformOutcome?)? = null,
 ) {
     companion object {
         private const val TAG = "T9InputController"
@@ -168,12 +169,14 @@ class T9InputController(
     }
 
     /**
-     * 候选词变换（hotPath 插件能力）：引擎结果原样 + 插件候选注入列表。
-     * t9Dispatcher 线程同步等插件至多 15ms；失败/不干预返回空注入。
+     * 候选词变换（hotPath 插件能力）：引擎结果原样 + 插件变换结果（候选注入 +
+     * 注释覆盖）。
+     * t9Dispatcher 线程同步等插件至多 15ms；失败/不干预返回空 outcome。
      */
-    private fun transformInjections(result: RimeProcessResult): Pair<RimeProcessResult, List<com.kingzcheung.xime.service.T9CandidateInjection>> {
-        val injections = candidateTransform?.invoke(result) ?: emptyList()
-        return result to injections
+    private fun transformOutcome(result: RimeProcessResult): Pair<RimeProcessResult, com.kingzcheung.xime.service.T9TransformOutcome> {
+        val outcome = candidateTransform?.invoke(result)
+            ?: com.kingzcheung.xime.service.T9TransformOutcome(emptyList(), emptyMap())
+        return result to outcome
     }
 
     /**
@@ -184,12 +187,12 @@ class T9InputController(
      */
     private fun refreshOnBackground() {
         val data = fetchAll()
-        val (finalResult, injections) = transformInjections(data.result)
+        val (finalResult, outcome) = transformOutcome(data.result)
         val composition = finalResult.toComposition()
         val gen = ++uiGeneration
         mainHandler.post {
             if (gen != uiGeneration) return@post
-            onCompositionRefresh?.invoke(composition, injections)
+            onCompositionRefresh?.invoke(composition, outcome)
             applyCandidates(finalResult, data.panel, data.options)
         }
     }
@@ -380,7 +383,7 @@ class T9InputController(
         rimeEngine.t9FlushRimeInput()
         val undoneCount = rimeEngine.t9GetAndConsumeUndoneRightCommitCount()
         val data = fetchAll()
-        val (finalResult, injections) = transformInjections(data.result)
+        val (finalResult, outcome) = transformOutcome(data.result)
         val composition = finalResult.toComposition()
         val deleteResult = if (result) DeleteResult.DELETED else DeleteResult.NOT_CONSUMED
         val gen = ++uiGeneration
@@ -391,7 +394,7 @@ class T9InputController(
                 onRightCommitUndone?.invoke(undoneCount)
             }
             if (gen == uiGeneration) {
-                onCompositionRefresh?.invoke(composition, injections)
+                onCompositionRefresh?.invoke(composition, outcome)
                 applyCandidates(finalResult, data.panel, data.options)
             }
             callback(deleteResult)

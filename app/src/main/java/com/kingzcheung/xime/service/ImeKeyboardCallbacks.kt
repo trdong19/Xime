@@ -375,11 +375,16 @@ internal fun rememberImeKeyboardCallbacks(
                     }
                 }
             },
-            onT9RefreshComposition = { composition, injections ->
+            onT9RefreshComposition = { composition, outcome ->
                 // composition 由 T9 控制器在 flush 后一次取回并传入，
                 // 避免在此再次 getComposition 造成重复 JNI 往返。
                 service.mainHandler.post {
-                    service.sessionController.applyComposition(composition, emptyList(), injections)
+                    service.sessionController.applyComposition(
+                        composition,
+                        emptyList(),
+                        outcome?.injections ?: emptyList(),
+                        outcome?.commentOverrides ?: emptyMap(),
+                    )
                 }
             },
             onTCandidateTransform = { result ->

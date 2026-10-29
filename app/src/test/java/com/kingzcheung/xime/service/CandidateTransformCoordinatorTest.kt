@@ -115,6 +115,149 @@ class CandidateTransformCoordinatorTest {
         assertEquals("c19", result.candidates[19].text)
     }
 
+    // ---------- T9 响应折叠（foldT9Response） ----------
+
+    private val t9Engine = listOf(
+        RimeCandidate("你好", "ni hao"),
+        RimeCandidate("拟好", "ni hao"),
+        RimeCandidate(" hello", "hello"),
+    )
+
+    @Test
+    fun `T9 引擎引用项注释覆盖按文本收集`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(CandidateTransformItem(engineIndex = 0, text = null, comment = "nǐ hǎo")),
+            engineCandidates = t9Engine,
+        )
+        assertEquals(mapOf("你好" to "nǐ hǎo"), outcome.commentOverrides)
+        assertTrue(outcome.injections.isEmpty())
+    }
+
+    @Test
+    fun `T9 注释空或与原注释相同的引用项不产生覆盖`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 0, text = null, comment = null),
+                CandidateTransformItem(engineIndex = 1, text = null, comment = "ni hao"),
+            ),
+            engineCandidates = t9Engine,
+        )
+        assertTrue(outcome.commentOverrides.isEmpty())
+        assertTrue(outcome.injections.isEmpty())
+    }
+
+    @Test
+    fun `T9 越界引擎索引丢弃不崩溃`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 99, text = null, comment = "越界"),
+                CandidateTransformItem(engineIndex = -1, text = null, comment = "负数"),
+            ),
+            engineCandidates = t9Engine,
+        )
+        assertTrue(outcome.commentOverrides.isEmpty())
+    }
+
+    @Test
+    fun `T9 插件自有项按锚点折叠为注入`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 0, text = null, comment = null),
+                CandidateTransformItem(engineIndex = null, text = "快捷短语", comment = "快捷"),
+                CandidateTransformItem(engineIndex = null, text = "另一条", comment = null),
+            ),
+            engineCandidates = t9Engine,
+        )
+        // 引用项无新注释 → 无覆盖；自有项按锚点折叠
+        assertTrue(outcome.commentOverrides.isEmpty())
+        assertEquals(2, outcome.injections.size)
+        assertEquals("快捷短语", outcome.injections[0].snapshot.text)
+        assertEquals("快捷", outcome.injections[0].snapshot.comment)
+        assertEquals(0, outcome.injections[0].anchorEngineIndex)
+        assertEquals("另一条", outcome.injections[1].snapshot.text)
+        assertEquals("", outcome.injections[1].snapshot.comment)
+        assertEquals(0, outcome.injections[1].anchorEngineIndex)
+    }
+
+    @Test
+    fun `T9 同文本多候选保留首个覆盖`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 0, text = null, comment = "nǐ hǎo"),
+                CandidateTransformItem(engineIndex = 1, text = null, comment = "nǐ hǎo?"),
+            ),
+            engineCandidates = t9Engine,
+        )
+        // 你好(0) 与 拟好(1) 文本不同 → 各自覆盖
+        assertEquals(
+            mapOf("你好" to "nǐ hǎo", "拟好" to "nǐ hǎo?"),
+            outcome.commentOverrides,
+        )
+    }
+
+    @Test
+    fun `T9 混合列表锚点跟随最近一次引擎引用`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 1, text = null, comment = null),
+                CandidateTransformItem(engineIndex = null, text = "跟在拟好后", comment = null),
+                CandidateTransformItem(engineIndex = null, text = "跟在拟好后2", comment = null),
+            ),
+            engineCandidates = t9Engine,
+        )
+        assertEquals(2, outcome.injections.size)
+        assertEquals(1, outcome.injections[0].anchorEngineIndex)
+        assertEquals(1, outcome.injections[1].anchorEngineIndex)
+    }
+
+    @Test
+    fun `T9 同文本候选 putIfAbsent 保留首个覆盖`() {
+        val sameText = listOf(
+            RimeCandidate("重", "chong2"),
+            RimeCandidate("重", "zhong4"),
+        )
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 0, text = null, comment = "chóng"),
+                CandidateTransformItem(engineIndex = 1, text = null, comment = "zhòng"),
+            ),
+            engineCandidates = sameText,
+        )
+        assertEquals(mapOf("重" to "chóng"), outcome.commentOverrides)
+    }
+
+    @Test
+    fun `T9 前导空格文本作为精确 key`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 2, text = null, comment = "hello"),
+            ),
+            engineCandidates = t9Engine,
+        )
+        assertEquals(mapOf(" hello" to "hello"), outcome.commentOverrides)
+    }
+
+    @Test
+    fun `T9 组合场景：注释覆盖与候选注入同时存在`() {
+        val outcome = CandidateTransformCoordinator.foldT9Response(
+            items = listOf(
+                CandidateTransformItem(engineIndex = 0, text = null, comment = "nǐ hǎo"),
+                CandidateTransformItem(engineIndex = null, text = "快捷短语", comment = "快捷"),
+                CandidateTransformItem(engineIndex = 1, text = null, comment = "nǐ hǎo"),
+            ),
+            engineCandidates = t9Engine,
+        )
+        // 两个引擎引用项各自覆盖（文本不同）
+        assertEquals(
+            mapOf("你好" to "nǐ hǎo", "拟好" to "nǐ hǎo"),
+            outcome.commentOverrides,
+        )
+        // 自有项锚点跟随其前最近的引擎引用（index=0）
+        assertEquals(1, outcome.injections.size)
+        assertEquals("快捷短语", outcome.injections[0].snapshot.text)
+        assertEquals(0, outcome.injections[0].anchorEngineIndex)
+    }
+
     @Test
     fun `空响应返回 null 不干预`() {
         assertNull(

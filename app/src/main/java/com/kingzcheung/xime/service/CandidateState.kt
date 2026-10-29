@@ -18,6 +18,12 @@ data class CandidateState(
     /** 候选词变换映射（插件 candidate_transform 能力）：与 [candidates] 平行；
      *  空列表 = 纯引擎语义（显示 index 即引擎 index）。见 CandidateAction。 */
     val candidateActions: List<CandidateAction> = emptyList(),
+    /** T9 右选**定位**注释（引擎原注释，未被插件覆盖；与 [candidates] 平行）。
+     *  仅 T9 注释覆盖发生时填充，插件候选位为空串；空列表 = 无覆盖，定位注释
+     *  即 [candidateComments]。右选消费算法依赖原注释的字母数（CountLetters
+     *  不做声调归一化），故显示注释（candidateComments，可为带调覆盖）与
+     *  定位注释必须解耦。见 CandidateTransformCoordinator.T9TransformOutcome。 */
+    val t9EngineComments: List<String> = emptyList(),
     /** 跨页全量候选（仅候选展开态时由服务层填充，供本地分页与单字筛选）。
      *  空列表 = 未填充或引擎无候选。全局索引用于 selectCandidateByGlobalIndex。 */
     val expandedCandidates: List<RimeCandidate> = emptyList(),

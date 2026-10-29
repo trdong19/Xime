@@ -1102,12 +1102,20 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             } else null
 
         val isT9 = isT9Schema(service.uiState.value.currentSchemaId)
+        // T9 右选定位注释必须用引擎原注释（t9EngineComments）：显示注释可能被
+        // candidate_transform 插件覆盖为带调形式，而 C++ CountLetters 统计字母数
+        // 时不做声调归一化（nǐ hǎo=4 vs ni hao=5），会算错右选消费位数。
+        // t9EngineComments 空列表 = 无覆盖发生，回落 candidateComments（原行为）。
         val candidatePinyin = if (isT9) {
             expandedCandidate?.comment?.takeIf { it.isNotEmpty() }
-                ?: if (index < service.candidateState.value.candidateComments.size) {
-                    service.candidateState.value.candidateComments[index]
-                } else {
-                    null
+                ?: run {
+                    val cs = service.candidateState.value
+                    val engineComments = cs.t9EngineComments
+                    if (engineComments.isNotEmpty()) {
+                        engineComments.getOrNull(index)?.takeIf { it.isNotEmpty() }
+                    } else {
+                        cs.candidateComments.getOrNull(index)?.takeIf { it.isNotEmpty() }
+                    }
                 }
         } else {
             null

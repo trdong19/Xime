@@ -24,6 +24,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         composition: com.kingzcheung.xime.rime.RimeComposition,
         pluginActions: List<CandidateAction> = emptyList(),
         t9PluginInjections: List<T9CandidateInjection> = emptyList(),
+        t9CommentOverrides: Map<String, String> = emptyMap(),
     ) {
         val inputText = composition.input
         val codeInInputBox = SettingsPreferences.getInputTextLocation(service) == SettingsPreferences.INPUT_TEXT_INPUT_BOX
@@ -81,23 +82,34 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // 不实际消费 engineIndex，仅用于插件候选分流）
             val baseCands = display.displayCandidates
             val baseComments = display.displayComments
+            // T9 插件注释覆盖（candidate_transform）：按候选文本匹配回填显示注释
+            //（T9 展示态可能截断/重排候选，文本匹配对索引错位免疫；未命中的候选
+            // 保留引擎原注释）。插件候选自身的注释由 injection.snapshot 携带。
+            // 注意：baseComments（引擎原注释）另存为 t9EngineComments 供右选定位
+            //（CountLetters 不归一化声调，定位必须用原注释，见 ImeKeyRouter）。
+            val overriddenBaseComments = if (t9CommentOverrides.isEmpty()) baseComments
+            else baseCands.mapIndexed { i, cand -> t9CommentOverrides[cand] ?: baseComments.getOrElse(i) { "" } }
             val byAnchor = t9PluginInjections.groupBy { it.anchorEngineIndex }
             val mergedCands = ArrayList<String>(baseCands.size + t9PluginInjections.size)
             val mergedComments = ArrayList<String>(mergedCands.size)
+            val mergedEngineComments = ArrayList<String>(mergedCands.size)
             val mergedActions = ArrayList<CandidateAction>(mergedCands.size)
             for ((idx, cand) in baseCands.withIndex()) {
                 byAnchor[idx]?.forEach { inj ->
                     mergedCands.add(inj.snapshot.text)
                     mergedComments.add(inj.snapshot.comment)
+                    mergedEngineComments.add("")
                     mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
                 }
                 mergedCands.add(cand)
-                mergedComments.add(baseComments.getOrElse(idx) { "" })
+                mergedComments.add(overriddenBaseComments.getOrElse(idx) { "" })
+                mergedEngineComments.add(baseComments.getOrElse(idx) { "" })
                 mergedActions.add(CandidateAction.engine(idx))
             }
             byAnchor[null]?.forEach { inj ->
                 mergedCands.add(inj.snapshot.text)
                 mergedComments.add(inj.snapshot.comment)
+                mergedEngineComments.add("")
                 mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
             }
             displayCandidates = mergedCands
@@ -133,6 +145,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             hasPrevPage = hasPrevPage,
             // 候选词变换映射（全键盘 pluginActions / T9 平行 actions；防御空）
             candidateActions = if (isT9Schema) t9CandidateActions else pluginActions,
+            // T9 右选定位注释（引擎原注释）；非 T9 显式清空防跨模式残留错位
+            t9EngineComments = if (isT9Schema) mergedEngineComments else emptyList(),
             preeditCaretPos = displayCaretOffset(displayText, inputText)
         )
         if (isAsciiMode != service.uiState.value.isAsciiMode) {

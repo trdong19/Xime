@@ -37,6 +37,20 @@ data class T9CandidateInjection(
 )
 
 /**
+ * T9 场景候选词变换结果。
+ *
+ * - [injections]：插件自有候选注入列表（语义不变，按引擎锚点插入）；
+ * - [commentOverrides]：引擎候选注释覆盖（key = 引擎候选**文本**，value = 插件返回
+ *   的新注释）。T9 的引擎候选索引可能被引擎 partial 展示态替换/截断
+ *   （buildT9DisplayState），故按候选文本匹配而非索引传递，消费侧在
+ *   [ImeSessionController.applyComposition] 的 T9 分支回填显示注释。
+ */
+data class T9TransformOutcome(
+    val injections: List<T9CandidateInjection>,
+    val commentOverrides: Map<String, String>,
+)
+
+/**
  * 候选词变换协调器（插件 candidate_transform 能力，首个 hotPath 能力）。
  *
  * 在 rime 返回候选之后、候选栏渲染之前同步调用插件 transformCandidates 修改候选；
@@ -83,6 +97,37 @@ internal class CandidateTransformCoordinator(private val service: XimeInputMetho
             if (display.isEmpty()) return null
             // 纯引擎引用（重排/去注释覆盖）也保留 actions：显示 index 与引擎 index 可能不同
             return CandidateTransformResult(display, actions)
+        }
+
+        /**
+         * T9 插件响应折叠（纯函数，便于单测）：文本追加项按锚点收集为注入列表；
+         * 引擎引用项的 comment 覆盖按候选**文本**收集。校验口径：越界 engine_index
+         * 丢弃（getOrNull）；与引擎原注释相同的覆盖跳过（no-op 无意义，且避免
+         * 同文本多候选时挤掉真覆盖）；同文本多候选靠 putIfAbsent 保留首个覆盖。
+         */
+        internal fun foldT9Response(
+            items: List<CandidateTransformItem>,
+            engineCandidates: List<RimeCandidate>,
+        ): T9TransformOutcome {
+            val injections = mutableListOf<T9CandidateInjection>()
+            val overrides = mutableMapOf<String, String>()
+            var lastEngineAnchor: Int? = null
+            for (item in items) {
+                val engineIndex = item.engineIndex
+                if (engineIndex != null) {
+                    lastEngineAnchor = engineIndex
+                    val newComment = item.comment?.takeIf { it.isNotBlank() } ?: continue
+                    val engine = engineCandidates.getOrNull(engineIndex) ?: continue
+                    if (newComment == engine.comment) continue
+                    overrides.putIfAbsent(engine.text, newComment)
+                    continue
+                }
+                val text = item.text?.takeIf { it.isNotEmpty() } ?: continue
+                injections.add(
+                    T9CandidateInjection(lastEngineAnchor, PluginCandidateSnapshot(text, item.comment ?: ""))
+                )
+            }
+            return T9TransformOutcome(injections, overrides)
         }
     }
 
@@ -156,12 +201,12 @@ internal class CandidateTransformCoordinator(private val service: XimeInputMetho
     /**
      * T9 场景变换入口（t9Dispatcher/key-processing 线程，阻塞至多 15ms）。
      * 与 [transform] 的区别：T9 候选索引可能被引擎 partial 展示态替换，engine_index
-     * 引用不可信 → 响应只取 text 追加项（引擎引用丢弃），但记录每条 text 项的
-     * 引擎锚点（其前最近一次引擎引用的 index），供 applyComposition T9 分支按锚点
-     * 插入（插件 Lua 的输出顺序已表达"编码命中→第二候选位、内容命中→跟随候选"）。
-     * 短路条件同 [transform]；T9 本身不作短路（本方法即 T9 路径）。
+     * 引用不可信 → 引擎引用项折叠为**注释覆盖**（按候选文本匹配，见
+     * [T9TransformOutcome.commentOverrides]）而非索引改写；文本追加项仍按引擎锚点
+     * 收集为注入列表（插件 Lua 的输出顺序已表达"编码命中→第二候选位、内容命中→
+     * 跟随候选"）。短路条件同 [transform]；T9 本身不作短路（本方法即 T9 路径）。
      */
-    fun transformForT9(result: RimeProcessResult): List<T9CandidateInjection>? {
+    fun transformForT9(result: RimeProcessResult): T9TransformOutcome? {
         if (disabledThisSession) return null
         if (result.isAsciiMode) return null
         if (result.inputText.isEmpty() && result.candidates.isEmpty()) return null
@@ -195,20 +240,9 @@ internal class CandidateTransformCoordinator(private val service: XimeInputMetho
             }
             is CandidateTransformOutcome.Success -> {
                 consecutiveFailures = 0
-                val injections = mutableListOf<T9CandidateInjection>()
-                var lastEngineAnchor: Int? = null
-                for (item in outcome.items) {
-                    if (item.engineIndex != null) {
-                        lastEngineAnchor = item.engineIndex
-                        continue
-                    }
-                    val text = item.text?.takeIf { it.isNotEmpty() } ?: continue
-                    injections.add(
-                        T9CandidateInjection(lastEngineAnchor, PluginCandidateSnapshot(text, item.comment ?: ""))
-                    )
-                }
-                logTransform("T9", pluginId, result.inputText, "inject", injections.size)
-                injections.takeIf { it.isNotEmpty() }
+                val folded = foldT9Response(outcome.items, result.candidates)
+                logTransform("T9", pluginId, result.inputText, "inject", folded.injections.size)
+                folded.takeIf { it.injections.isNotEmpty() || it.commentOverrides.isNotEmpty() }
             }
         }
     }

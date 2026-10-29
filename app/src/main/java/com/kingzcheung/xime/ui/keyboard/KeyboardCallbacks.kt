@@ -116,10 +116,11 @@ data class KeyboardCallbacks(
      * T9 键盘状态变更后通知服务层刷新 UI（候选区、preedit 等）。
      * 携带 flush 后一次取回的 composition，服务层直接应用，避免内部重复 getComposition。
      */
-    var onT9RefreshComposition: ((RimeComposition, List<com.kingzcheung.xime.service.T9CandidateInjection>) -> Unit)? = null,
+    var onT9RefreshComposition: ((RimeComposition, com.kingzcheung.xime.service.T9TransformOutcome?) -> Unit)? = null,
     /** T9 候选词变换（hotPath 插件能力）：T9 控制器后台取数后调用，
-     *  返回带引擎锚点的插件候选注入列表（text 追加项），null/空 = 不干预。 */
-    val onTCandidateTransform: ((RimeProcessResult) -> List<com.kingzcheung.xime.service.T9CandidateInjection>?)? = null,
+     *  返回插件候选注入列表（text 追加项）与引擎候选注释覆盖（按文本匹配），
+     *  null/空 = 不干预。 */
+    val onTCandidateTransform: ((RimeProcessResult) -> com.kingzcheung.xime.service.T9TransformOutcome?)? = null,
     val onShowQuickSendForm: (() -> Unit)? = null,
     /**
      * 从剪贴板面板主动拉取远端剪贴板内容（仅剪贴板同步已启用时非空）。
