@@ -58,6 +58,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         val displayComments: List<String>
         val isComposing: Boolean
         var t9CandidateActions: List<CandidateAction> = emptyList()
+        /** T9 右选定位注释（引擎原注释，与 displayCandidates 平行）；非 T9 为空。 */
+        var mergedEngineComments: List<String> = emptyList()
         if (isT9Schema) {
             // T9 编码显示永不回退原始数字 input：preedit 缺失，或含未转换数字
             //（合成切不出词时引擎把原始输入当编码回退，如全拼+简拼混合态）时，
@@ -92,30 +94,31 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             val byAnchor = t9PluginInjections.groupBy { it.anchorEngineIndex }
             val mergedCands = ArrayList<String>(baseCands.size + t9PluginInjections.size)
             val mergedComments = ArrayList<String>(mergedCands.size)
-            val mergedEngineComments = ArrayList<String>(mergedCands.size)
+            val engineComments = ArrayList<String>(mergedCands.size)
             val mergedActions = ArrayList<CandidateAction>(mergedCands.size)
             for ((idx, cand) in baseCands.withIndex()) {
                 byAnchor[idx]?.forEach { inj ->
                     mergedCands.add(inj.snapshot.text)
                     mergedComments.add(inj.snapshot.comment)
-                    mergedEngineComments.add("")
+                    engineComments.add("")
                     mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
                 }
                 mergedCands.add(cand)
                 mergedComments.add(overriddenBaseComments.getOrElse(idx) { "" })
-                mergedEngineComments.add(baseComments.getOrElse(idx) { "" })
+                engineComments.add(baseComments.getOrElse(idx) { "" })
                 mergedActions.add(CandidateAction.engine(idx))
             }
             byAnchor[null]?.forEach { inj ->
                 mergedCands.add(inj.snapshot.text)
                 mergedComments.add(inj.snapshot.comment)
-                mergedEngineComments.add("")
+                engineComments.add("")
                 mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
             }
             displayCandidates = mergedCands
             displayComments = mergedComments
             isComposing = display.isComposing
             t9CandidateActions = mergedActions
+            mergedEngineComments = engineComments
         } else {
             // 非 T9 方案：preeditText 用引擎回显（带音节分隔符，如全拼 ni'hao）供候选栏展示；
             // inputText 保留原始键入串（无分隔）——空格/切模式等提交路径会把它直接上屏，

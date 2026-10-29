@@ -240,7 +240,7 @@ internal class CandidateTransformCoordinator(private val service: XimeInputMetho
             }
             is CandidateTransformOutcome.Success -> {
                 consecutiveFailures = 0
-                val folded = foldT9Response(outcome.items, result.candidates)
+                val folded = foldT9Response(outcome.items, result.candidates.toList())
                 logTransform("T9", pluginId, result.inputText, "inject", folded.injections.size)
                 folded.takeIf { it.injections.isNotEmpty() || it.commentOverrides.isNotEmpty() }
             }
