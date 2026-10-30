@@ -156,12 +156,13 @@ android {
         checkDependencies = true
     }
 
-    // 分架构打包
+    // 分架构打包（个人构建精简：ndk.abiFilters 已限定 arm64-v8a，关闭 splits
+    // 避免与 abiFilters 的 AGP 冲突——产物为单个含 arm64 库的 APK。
+    // 如需分架构 APK 恢复：splits { abi { isEnable = true; reset(); include("armeabi-v7a", "arm64-v8a", "x86", "x86_64"); isUniversalApk = true } }
+    // 并将 ndk.abiFilters 恢复为 listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")）
     splits {
         abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a")
+            isEnable = false
             isUniversalApk = false
         }
     }
