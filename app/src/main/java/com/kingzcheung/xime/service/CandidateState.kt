@@ -32,4 +32,9 @@ data class CandidateState(
     /** 编码显示串中的光标偏移（字符，-1 = 末尾/非编辑态）。
      *  全键盘组合态滑动编辑时由服务层从 editingCaretPos 映射（快照比对自愈），供气泡竖线与输入框光标。 */
     val preeditCaretPos: Int = -1,
+
+    /** T9 注释覆盖表（candidate_transform 插件，key=候选文本 value=带调注释）。
+     *  展开页（CandidatePage）渲染时按文本回填显示注释；右选定位仍用引擎原
+     *  注释（t9EngineComments / expandedCandidates），见 ImeKeyRouter。 */
+    val t9CommentOverrides: Map<String, String> = emptyMap(),
 )
