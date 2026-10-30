@@ -150,6 +150,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             candidateActions = if (isT9Schema) t9CandidateActions else pluginActions,
             // T9 右选定位注释（引擎原注释）；非 T9 显式清空防跨模式残留错位
             t9EngineComments = if (isT9Schema) mergedEngineComments else emptyList(),
+            // T9 显示注释覆盖表（供候选展开页 CandidatePage 回填，key=候选文本）
+            t9CommentOverrides = if (isT9Schema) t9CommentOverrides else emptyMap(),
             preeditCaretPos = displayCaretOffset(displayText, inputText)
         )
         if (isAsciiMode != service.uiState.value.isAsciiMode) {
