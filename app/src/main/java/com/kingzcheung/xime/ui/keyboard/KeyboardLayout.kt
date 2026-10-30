@@ -324,6 +324,9 @@ fun KeyboardLayout(
                         shadowShapeRadius = shadowShapeRadius,
                         onKeyPress = onKeyPress,
                         onKeyPressDown = onKeyPressDown,
+                        onBackspaceSweepDeleteStep = callbacks.onBackspaceSweepDeleteStep,
+                        onBackspaceSweepRestoreOne = callbacks.onBackspaceSweepRestoreOne,
+                        onBackspaceSweepFinish = callbacks.onBackspaceSweepFinish,
                         onKeyRelease = onKeyRelease,
                         onCommitText = onCommitText,
                         onGestureAction = onGestureAction,
@@ -612,6 +615,10 @@ internal class QwertyRowEnv(
     val ctrlFontSize: TextUnit? = null,
     /** 手势/宽度配置来源段名（主键盘 = "qwerty"；面板 = number / common_symbols…）。 */
     val section: String = "qwerty",
+    /** 退格滑动删除/恢复步进与抬手结算；主键盘/横屏分体传入，面板不传保持一次性左右滑旧行为 */
+    val onBackspaceSweepDeleteStep: (() -> Unit)? = null,
+    val onBackspaceSweepRestoreOne: (() -> Unit)? = null,
+    val onBackspaceSweepFinish: (() -> Unit)? = null,
 )
 
 /** 功能键列宽：显式 `keys.<id>.width` 优先，否则内置默认。 */
@@ -1283,6 +1290,16 @@ private fun DeleteCell(env: QwertyRowEnv, modifier: Modifier) {
         onSwipeDown = { invokeKeyAction(delDown, env.onKeyPress, env.onCommitText, env.onGestureAction) },
         onSwipeLeft = { invokeKeyAction(delLeft, env.onKeyPress, env.onCommitText, env.onGestureAction) },
         onSwipeRight = { invokeKeyAction(delRight, env.onKeyPress, env.onCommitText, env.onGestureAction) },
+        // 滑动删除/恢复：左滑逐字删、右滑逐字恢复（接管 delLeft/delRight 的横滑语义，
+        // 候选栏模式下两者默认映射的组合态清空/撤回由逐字版本覆盖）
+        // 滑动删除仅主键盘启用（面板 env 三字段为 null 时保持一次性左右滑旧行为）
+        onSweepStep = env.onBackspaceSweepDeleteStep?.let { delStep ->
+            { step: Int ->
+                if (step < 0) delStep()
+                else env.onBackspaceSweepRestoreOne?.invoke()
+            }
+        },
+        onSweepEnd = env.onBackspaceSweepFinish?.let { fin -> { fin() } },
         onSwipeStateChange = { state, bounds -> env.processSwipeState(state, bounds) },
         shadowEnabled = env.shadowEnabled,
         shadowElevation = env.shadowElevation,
@@ -2065,6 +2082,9 @@ private fun LandscapeKeyboardContent(
         shadowShapeRadius = shadowShapeRadius,
         onKeyPress = onKeyPress,
         onKeyPressDown = onKeyPressDown,
+        onBackspaceSweepDeleteStep = callbacks.onBackspaceSweepDeleteStep,
+        onBackspaceSweepRestoreOne = callbacks.onBackspaceSweepRestoreOne,
+        onBackspaceSweepFinish = callbacks.onBackspaceSweepFinish,
         onKeyRelease = onKeyRelease,
         onCommitText = onCommitText,
         onGestureAction = onGestureAction,

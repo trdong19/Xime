@@ -1258,6 +1258,15 @@ fun SwipeableIconKeyButton(
     /** 右滑动作；与 [onSwipeLeft] 任一配置后，该键横向滑动即接管，自动放弃父层光标手势。 */
     onSwipeRight: (() -> Unit)? = null,
     /**
+     * 退格键连续横滑步进（滑动删除/恢复）：非空时启用滑动删除模式——横向占优跨过
+     * 接管阈值（30dp）后激活，此后每累计 [sweepStepDp] 触发一次（-1 左滑删一字、
+     * +1 右滑恢复一字），触发时停长按连删并抑制一次性左右滑（clear_composition/
+     * 撤回改由步进语义接管）；抬手回调 [onSweepEnd] 结算删除会话与撤销记账。
+     */
+    onSweepStep: ((Int) -> Unit)? = null,
+    onSweepEnd: (() -> Unit)? = null,
+    sweepStepDp: Float = 10f,
+    /**
      * 长按是否连发（每 30ms 重复）。删除键为 true（长按连删）；
      * 普通功能键传 false（长按只触发一次，避免重复打开面板/切换状态）。
      */
@@ -1288,6 +1297,11 @@ fun SwipeableIconKeyButton(
     var hasTriggeredLongPress by remember { mutableStateOf(false) }
     var buttonBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
     var dragActivated by remember { mutableStateOf(false) }
+    // 滑动删除/恢复模式（onSweepStep 非空时启用）：激活后停长按连删、抑制一次性左右滑与点击
+    var sweepMode by remember { mutableStateOf(false) }
+    var sweepAccum by remember { mutableStateOf(0f) }
+    val currentOnSweepStep by rememberUpdatedState(onSweepStep)
+    val currentOnSweepEnd by rememberUpdatedState(onSweepEnd)
     // 本次手势的横向净位移峰值（父层光标手势同口径）
     var gesturePeakDx by remember { mutableStateOf(0f) }
     // 本次手势按下点（局部坐标）
@@ -1321,7 +1335,9 @@ fun SwipeableIconKeyButton(
     // 与 KeyboardView 光标手势激活阈值（activationThresholdPx = 60dp）对齐，
     // 消除 30~60dp 位移区间"点击被取消但光标手势未激活"的死区（打字吃键）。
     val horizontalClickCancelThreshold = with(density) { 60.dp.toPx() }
-    
+    // 滑动删除步进距离（横滑每累计该位移触发一次删/恢复）
+    val sweepStepPx = with(density) { sweepStepDp.coerceAtLeast(1f).dp.toPx() }
+
     LaunchedEffect(isLongPress, repeatLongPress) {
         if (isLongPress && onLongClick != null) {
             hasTriggeredLongPress = true
@@ -1419,11 +1435,19 @@ fun SwipeableIconKeyButton(
                         isDangerZone = false
                         hasReachedClearThreshold = false
                         hasReachedUndoThreshold = false
+                        sweepMode = false
+                        sweepAccum = 0f
                         onSwipeStateChange?.invoke(SwipeState(), buttonBounds)
                         onPress?.invoke()
                     },
                     onDragEnd = {
-                        if (hasReachedClearThreshold && onSwipeUp != null) {
+                        if (sweepMode) {
+                            // 滑动删除/恢复手势结束：结算删除会话（撤销记账），
+                            // 并否决点击（横向滑动已被步进消费）
+                            sweepMode = false
+                            sweepAccum = 0f
+                            currentOnSweepEnd?.invoke()
+                        } else if (hasReachedClearThreshold && onSwipeUp != null) {
                             onSwipeUp()
                         } else if (hasReachedUndoThreshold && onSwipeDown != null) {
                             onSwipeDown()
@@ -1434,6 +1458,7 @@ fun SwipeableIconKeyButton(
                             hasTriggeredSwipe = true
                             onSwipe()
                         } else if (
+                            !sweepMode &&
                             gesturePeakDx < horizontalClickCancelThreshold &&
                             !hasTriggeredLongPress &&
                             !hasTriggeredSwipeLeft && !hasTriggeredSwipeRight
@@ -1461,8 +1486,10 @@ fun SwipeableIconKeyButton(
                         onSwipeStateChange?.invoke(SwipeState(), buttonBounds)
                     },
                     onDragCancel = {
-                        // 拖拽被取消且没被判成滑动/长按：兜底点击，避免静默丢键
-                        if (gesturePeakDx < horizontalClickCancelThreshold &&
+                        if (sweepMode) {
+                            // 滑动删除手势被系统取消：同样结算删除会话，并否决点击
+                            currentOnSweepEnd?.invoke()
+                        } else if (gesturePeakDx < horizontalClickCancelThreshold &&
                             !hasTriggeredLongPress &&
                             !hasTriggeredSwipe && !hasTriggeredSwipeDown &&
                             !hasTriggeredSwipeLeft && !hasTriggeredSwipeRight &&
@@ -1516,18 +1543,39 @@ fun SwipeableIconKeyButton(
                         if (isLongPress && (dragOffsetY < swipeUpThreshold || dragOffsetY > swipeDownThreshold || dragOffsetX < swipeLeftThreshold || dragOffsetX > horizontalClickCancelThreshold)) {
                             isLongPress = false
                         }
-                        
-                        if (dragOffsetX < swipeLeftThreshold && !hasTriggeredSwipeLeft && onSwipeLeftAction != null) {
+
+                        // 滑动删除/恢复（退格键，onSweepStep 非空时启用）：横向占优跨过接管阈值
+                        // 后激活，此后每累计 sweepStepDp 触发一次步进（-1 删一字 / +1 恢复一字）；
+                        // 激活即停长按连删（位移控制取代时间连发），并抑制一次性左右滑
+                        val onSweepStepAction = currentOnSweepStep
+                        if (onSweepStepAction != null) {
+                            if (!sweepMode && abs(dragOffsetX) > horizontalSwipeSuppressThreshold &&
+                                abs(dragOffsetX) > abs(dragOffsetY)
+                            ) {
+                                sweepMode = true
+                                isLongPress = false
+                            }
+                            if (sweepMode) {
+                                sweepAccum += dragAmount.x
+                                while (abs(sweepAccum) >= sweepStepPx) {
+                                    val step = if (sweepAccum > 0) 1 else -1
+                                    sweepAccum -= step * sweepStepPx
+                                    onSweepStepAction(step)
+                                }
+                            }
+                        }
+
+                        if (!sweepMode && dragOffsetX < swipeLeftThreshold && !hasTriggeredSwipeLeft && onSwipeLeftAction != null) {
                             hasTriggeredSwipeLeft = true
                             onSwipeLeftAction()
                         }
 
-                        if (dragOffsetX > swipeRightThreshold && !hasTriggeredSwipeRight && onSwipeRightAction != null) {
+                        if (!sweepMode && dragOffsetX > swipeRightThreshold && !hasTriggeredSwipeRight && onSwipeRightAction != null) {
                             hasTriggeredSwipeRight = true
                             onSwipeRightAction()
                         }
                         
-                        if (dragOffsetY < 0 && dragOffsetX >= swipeLeftThreshold) {
+                        if (!sweepMode && dragOffsetY < 0 && dragOffsetX >= swipeLeftThreshold) {
                             val showUp = dragOffsetY < bubbleShowThresholdUp && swipeUpLabel != null
                             if (showUp != isSwipingUp) {
                                 isSwipingUp = showUp
@@ -1550,7 +1598,7 @@ fun SwipeableIconKeyButton(
                             hasReachedClearThreshold = inDanger
                         }
                         
-                        if (dragOffsetY > 0 && dragOffsetX >= swipeLeftThreshold) {
+                        if (!sweepMode && dragOffsetY > 0 && dragOffsetX >= swipeLeftThreshold) {
                             val showDown = dragOffsetY > bubbleShowThresholdDown && swipeDownLabel != null
                             if (showDown != isSwipingDown) {
                                 isSwipingDown = showDown

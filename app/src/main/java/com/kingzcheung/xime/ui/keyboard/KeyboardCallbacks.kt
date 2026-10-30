@@ -121,6 +121,12 @@ data class KeyboardCallbacks(
      *  返回插件候选注入列表（text 追加项）与引擎候选注释覆盖（按文本匹配），
      *  null/空 = 不干预。 */
     val onTCandidateTransform: ((RimeProcessResult) -> com.kingzcheung.xime.service.T9TransformOutcome?)? = null,
+    /** 退格滑动左滑步进：QWERTY 走 service 删除（组合态删编码/空闲态删已上屏并入撤销栈） */
+    var onBackspaceSweepDeleteStep: (() -> Unit)? = null,
+    /** 退格滑动右滑步进：逐字恢复（栈优先，栈空回捡撤销槽尾字符） */
+    var onBackspaceSweepRestoreOne: (() -> Unit)? = null,
+    /** 退格滑动抬手结算（删除会话记账 + 字符栈清空）。 */
+    var onBackspaceSweepFinish: (() -> Unit)? = null,
     val onShowQuickSendForm: (() -> Unit)? = null,
     /**
      * 从剪贴板面板主动拉取远端剪贴板内容（仅剪贴板同步已启用时非空）。

@@ -340,6 +340,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      */
     internal var lastClearedText: String = ""
     /**
+     * 退格滑动删除会话内删掉的字符栈（LIFO，恢复时后删先回）。
+     * 滑动手势（onBackspaceSweepStep）逐字删除时入栈、右滑逐字恢复时出栈；
+     * 抬手结算（[onBackspaceSweepFinish]）后清空——净删除已由删除会话差值记账
+     * 写入 [lastClearedText]，此后下滑撤回接管。栈空时右滑恢复转而消费
+     * [lastClearedText] 尾字符（逐字回捡上一个删除会话删掉的内容）。
+     */
+    private val sweepRemovedChars = ArrayDeque<String>()
+    /**
      * 撤销落点锚：删除会话入账（[finishDeleteSession]）时光标前的文本（窗口读取，
      * 见 [UNDO_TEXT_WINDOW]）。下滑撤回前校验光标前文本未变，避免用户随后打过字 /
      * 移过光标时把旧内容插到错误位置。
@@ -3208,6 +3216,87 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (removed.isEmpty()) return
         lastClearedText = removed
         lastUndoAnchorText = after
+    }
+
+    // ── 退格键滑动删除/恢复（candidate_transform 手势，2026-10-30）──
+
+    /**
+     * 退格滑动步进：[step] = -1 左滑删一字 / +1 右滑恢复一字。
+     *
+     * 组合态（编码未上屏）：左滑复用单击退格链路逐字删编码（引擎/T9 联动由既有
+     * 路径处理），右滑无恢复语义（编码可重打）→ 忽略。
+     * 空闲态：左滑 [deleteBeforeCursor](1) 并把删掉的字符压入 [sweepRemovedChars]；
+     * 右滑优先弹栈回插（后删先恢复），栈空时逐字消费 [lastClearedText]（上一个
+     * 删除会话的内容）。全程主线程，单次 IC 往返。
+     */
+    internal fun onBackspaceSweepDeleteStep() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { onBackspaceSweepDeleteStep() }
+            return
+        }
+        // 组合态口径与 ImeKeyRouter.hasInputState 对齐（编码/待确认英文/T9 部分段均算），
+        // 走既有单击退格链路（含 T9 引擎消费），右滑恢复在组合态无语义
+        val cs = candidateState.value
+        if (cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
+            cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
+        ) {
+            keyboardCallbacks?.onKeyPress("delete", false)
+            return
+        }
+        // 空闲态：确保删除会话已开账（手势可能未经过单击路径）
+        if (!deleteSessionActive) beginDeleteSession()
+        val before = readTextBeforeCursorWindowed()
+        // 按码点取最后一个字符（emoji 等代理对整体删除，避免删半个字符）
+        if (before.isNullOrEmpty()) return
+        val start = before.offsetByCodePoints(before.length, -1)
+        val ch = before.substring(start)
+        deleteBeforeCursor(before.length - start)
+        sweepRemovedChars.addLast(ch)
+    }
+
+    internal fun onBackspaceSweepRestoreOne() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { onBackspaceSweepRestoreOne() }
+            return
+        }
+        val cs = candidateState.value
+        if (cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
+            cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
+        ) {
+            return  // 组合态恢复无语义（编码可重打）
+        }
+        val ch = sweepRemovedChars.removeLastOrNull()
+        if (ch != null) {
+            // 本会话内逐字恢复：回插到光标前（原删除位置），不触发联想
+            commitTextSilently(ch)
+            return
+        }
+        // 栈空：逐字回捡上一个删除会话的内容（lastClearedText 尾字符）
+        val cleared = lastClearedText
+        if (cleared.isEmpty()) return
+        val probe = readTextBeforeCursorWindowed()
+        if (!DeleteUndo.anchorMatches(lastUndoAnchorText, probe)) return
+        val start = cleared.offsetByCodePoints(cleared.length, -1)
+        val ch2 = cleared.substring(start)
+        commitTextSilently(ch2)
+        lastClearedText = cleared.substring(0, cleared.length - ch2.length)
+        // 锚随恢复推进，否则第二个字起被锚校验拦截、剩余内容被撤销通道丢弃
+        lastUndoAnchorText = readTextBeforeCursorWindowed() ?: (probe + ch2)
+    }
+
+    /**
+     * 退格滑动抬手结算：清字符栈，删除会话差值记账写入 [lastClearedText]
+     * （滑动全程是一个删除会话：按下时 beginDeleteSession 已由单击路径触发，
+     * 未触发时首次 deleteOne 已补开）——下滑撤回（undo_clear）对滑动删除的
+     * 净删除照常生效。
+     */
+    internal fun onBackspaceSweepFinish() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { onBackspaceSweepFinish() }
+            return
+        }
+        sweepRemovedChars.clear()
+        finishDeleteSession()
     }
 
     /**
