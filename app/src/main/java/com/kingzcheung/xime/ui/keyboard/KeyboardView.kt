@@ -350,7 +350,7 @@ fun KeyboardView(
                 } else {
                     CandidateBarState.from(
                         candidates = if (railExpanded.isNotEmpty()) railExpanded.map { it.second.text } else cs.candidates,
-                        candidateComments = if (railExpanded.isNotEmpty()) railExpanded.map { it.second.comment } else cs.candidateComments,
+                        candidateComments = if (railExpanded.isNotEmpty()) railExpanded.map { (i, c) -> cs.t9CommentOverrides[c.text] ?: c.comment } else cs.candidateComments,
                         inputText = cs.inputText,
                         preeditText = cs.preeditText,
                         isComposing = cs.isComposing,
@@ -714,7 +714,7 @@ fun KeyboardView(
                     )
                 }
                 val candidateRows = remember(
-                    allExpanded, singleCharFilter, rowWidthUnits
+                    allExpanded, singleCharFilter, rowWidthUnits, cs.t9CommentOverrides
                 ) {
                     ExpandedCandidatePager.flowRows(
                         ExpandedCandidatePager.filterIndices(allExpanded, singleCharFilter),
@@ -722,7 +722,9 @@ fun KeyboardView(
                         rowWidthUnits
                     ).map { row ->
                         row.map { gi ->
-                            CandidateEntry(allExpanded[gi].text, allExpanded[gi].comment, gi)
+                            val c = allExpanded[gi]
+                            // T9 注释覆盖按文本回填（显示用；点选定位走 globalIndex 原注释）
+                            CandidateEntry(c.text, cs.t9CommentOverrides[c.text] ?: c.comment, gi)
                         }
                     }
                 }
