@@ -245,6 +245,9 @@ internal fun rememberImeKeyboardCallbacks(
                     service.moveCursor(direction)
                 }
             },
+            onCursorJump = { toEnd ->
+                service.jumpCursor(toEnd)
+            },
             onGestureAction = { action, value ->
                 KeyActionRegistry.execute(action, KeyActionContext(service), value)
             },

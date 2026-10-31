@@ -373,8 +373,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      */
     private var deleteSessionActive = false
     private var deleteSessionBeforeText = ""
-    private var deleteSessionBeforeCode = ""
-    /** 累积的 partial commit 段列表（多段选词场景下逐段追加，文本+拼音同源，供调频/回滚） */
+        /** 累积的 partial commit 段列表（多段选词场景下逐段追加，文本+拼音同源，供调频/回滚） */
     internal val t9PartialSegments = mutableListOf<T9PartialSegment>()
     /**
      * 组合态编码编辑光标（raw input 字符偏移，-1 = 位于末尾/非编辑态）。
@@ -2194,6 +2193,37 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
     }
 
+    /**
+     * 光标跳转到行头/行尾（滑动手势上滑触发）。
+     * 组合态（仅全键盘）：跳编码头/尾；T9 组合态不支持（编码无编辑光标）；
+     * 空闲态：在编辑器文本内按换行符定位行边界。
+     */
+    internal fun jumpCursor(toEnd: Boolean) {
+        if (candidateState.value.isComposing) {
+            if (isT9Schema(uiState.value.currentSchemaId)) return
+            val input = rimeEngine.getInput()
+            if (input.isNotEmpty()) {
+                editingCaretPos = if (toEnd) -1 else 0
+                editingCaretInput = if (editingCaretPos >= 0) input else ""
+                updateUI()
+            }
+            return
+        }
+        val ic = currentInputConnection ?: return
+        val req = android.view.inputmethod.ExtractedTextRequest()
+        val extracted = try { ic.getExtractedText(req, 0) } catch (_: Exception) { null } ?: return
+        val text = extracted.text?.toString() ?: return
+        val pos = extracted.selectionStart.coerceIn(0, text.length)
+        val target = if (toEnd) {
+            text.indexOf('\n', pos).takeIf { it >= 0 } ?: text.length
+        } else {
+            val prev = text.lastIndexOf('\n', (pos - 1).coerceAtLeast(0))
+            if (prev >= 0) prev + 1 else 0
+        }
+        selfWriteCaret.noteWrite(target - pos, android.os.SystemClock.uptimeMillis())
+        ic.setSelection(target, target)
+    }
+
     override fun executeCommand(name: String) {
         when (name) {
             "clear_composition" -> {
@@ -3173,9 +3203,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     // 由既有 undo_clear 分支回插，不改动撤回通道本身。
 
     /** 编码串是否显示在输入框内（候选栏模式需单独记编码，输入框模式已含在文本差里）。 */
-    private fun isInputTextInInputBox(): Boolean =
-        SettingsPreferences.getInputTextLocation(this) == SettingsPreferences.INPUT_TEXT_INPUT_BOX
-
     /** 读取光标前文本（受限窗口，见 [UNDO_TEXT_WINDOW]）。需主线程；读不到返回 null。 */
     private fun readTextBeforeCursorWindowed(): String? = runCatching {
         currentInputConnection?.getTextBeforeCursor(UNDO_TEXT_WINDOW, 0)?.toString()
@@ -3200,7 +3227,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val before = readTextBeforeCursorWindowed() ?: return
         deleteSessionActive = true
         deleteSessionBeforeText = before
-        deleteSessionBeforeCode = if (isInputTextInInputBox()) "" else candidateState.value.inputText
     }
 
     /**
@@ -3218,9 +3244,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (!deleteSessionActive) return
         deleteSessionActive = false
         val after = readTextBeforeCursorWindowed() ?: return
-        val afterCode = if (isInputTextInInputBox()) "" else candidateState.value.inputText
-        val removed = DeleteUndo.removedPrefix(deleteSessionBeforeText, after) +
-            DeleteUndo.removedPrefix(deleteSessionBeforeCode, afterCode)
+        // 只记文本差值：组合态删编码的字母差值若混入，下滑撤回会把拼音字母
+        // 当文字回插（"撤回的不是输入的字"）——组合态编码的恢复走滑动右滑
+        //（编码放回引擎），不走文本撤销槽。
+        val removed = DeleteUndo.removedPrefix(deleteSessionBeforeText, after)
         if (removed.isEmpty()) return
         lastClearedText = removed
         lastUndoAnchorText = after

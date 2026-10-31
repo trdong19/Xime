@@ -48,6 +48,8 @@ data class KeyboardCallbacks(
     val onPageDown: (() -> Unit)? = null,
     val onPageUp: (() -> Unit)? = null,
     val onCursorMove: ((Int) -> Unit)? = null,
+    /** 光标跳转到行头（false）/行尾（true）：横滑光标手势中上滑触发 */
+    val onCursorJump: ((Boolean) -> Unit)? = null,
     val onGestureAction: ((GestureAction, String) -> Unit)? = null,
     val onUpdateToolbarButtons: ((List<String>) -> Unit)? = null,
     /**

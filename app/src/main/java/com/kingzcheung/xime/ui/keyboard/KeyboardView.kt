@@ -839,8 +839,13 @@ fun KeyboardView(
                 when (mainType) {
                     MainType.FULL -> {
                         val currentOnCursorMove = rememberUpdatedState(callbacks.onCursorMove)
+                        val currentOnCursorJump = rememberUpdatedState(callbacks.onCursorJump)
                         val suppressCursorMove = remember { mutableStateOf(false) }
                         val cursorGestureActive = remember { mutableStateOf(false) }
+                        val viewHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                        var edgeHandler: Runnable? = null
+                        var edgeDir = 0
+                        val jumpThresholdPx = 40.dp.toPx()
                         val cursorMod = if (callbacks.onCursorMove != null) {
                             Modifier.pointerInput(Unit) {
                                 val stepThresholdPx = 25.dp.toPx()
@@ -851,6 +856,8 @@ fun KeyboardView(
                                     val down = awaitFirstDown(requireUnconsumed = false)
                                     var isCursorGesture = false
                                     var lastSteps = 0
+                                    var lastStepTime = 0L
+                                    var lastJumpSteps = Int.MIN_VALUE
                                     var activationAnchorX = down.position.x
 
                                     // 手势结束即清标志，避免跨手势残留（26 键已改按本次手势峰值判定）
@@ -865,6 +872,8 @@ fun KeyboardView(
                                                 if (isCursorGesture) {
                                                     event.changes.forEach { it.consume() }
                                                 }
+                                                edgeHandler?.let { viewHandler.removeCallbacks(it) }
+                                                edgeHandler = null
                                                 break
                                             }
                                             if (suppressCursorMove.value) break
@@ -881,15 +890,60 @@ fun KeyboardView(
                                                     val dxFromAnchor = change.position.x - activationAnchorX
                                                     val steps = (dxFromAnchor / stepThresholdPx).toInt()
                                                     if (steps != lastSteps) {
-                                                        val delta = steps - lastSteps
+                                                        val now = android.os.SystemClock.uptimeMillis()
+                                                        val interval = if (lastStepTime == 0L) 1000L else now - lastStepTime
+                                                        lastStepTime = now
+                                                        // 速度加速：连续快速滑动时步长倍增（慢滑逐字精调、快滑大步跳）
+                                                        val magnitude = when {
+                                                            interval < 120 -> 4
+                                                            interval < 250 -> 2
+                                                            else -> 1
+                                                        }
+                                                        val delta = (steps - lastSteps) * magnitude
                                                         currentOnCursorMove.value?.invoke(delta)
                                                         lastSteps = steps
+                                                    }
+                                                    // 行首/行尾跳转：横滑激活后上滑累计 ≥ 40dp →
+                                                    // 按滑动方向跳（左滑方向→行头、右滑方向→行尾），手势结束
+                                                    if (dy < -jumpThresholdPx && steps != lastJumpSteps) {
+                                                        lastJumpSteps = steps
+                                                        edgeHandler?.let { viewHandler.removeCallbacks(it) }
+                                                        edgeHandler = null
+                                                        event.changes.forEach { it.consume() }
+                                                        currentOnCursorJump.value?.invoke(dx > 0)
+                                                        break
+                                                    }
+                                                    // 边缘持续移动：手指贴住容器左右边缘不放，光标自动
+                                                    // 持续移动（先慢后快），离开边缘或抬手即停
+                                                    val inEdge = size.width > 0 &&
+                                                        (change.position.x < size.width * 0.12f || change.position.x > size.width * 0.88f)
+                                                    if (inEdge && (edgeHandler == null || edgeDir != if (dx > 0) 1 else -1)) {
+                                                        edgeHandler?.let { viewHandler.removeCallbacks(it) }
+                                                        edgeDir = if (dx > 0) 1 else -1
+                                                        var delayMs = 220L
+                                                        var chars = 1
+                                                        val dirLocal = edgeDir
+                                                        val runnable = object : Runnable {
+                                                            override fun run() {
+                                                                currentOnCursorMove.value?.invoke(dirLocal * chars)
+                                                                chars = (chars * 2).coerceAtMost(8)
+                                                                delayMs = (delayMs * 0.7f).toLong().coerceAtLeast(60L)
+                                                                viewHandler.postDelayed(this, delayMs)
+                                                            }
+                                                        }
+                                                        edgeHandler = runnable
+                                                        viewHandler.postDelayed(runnable, 220L)
+                                                    } else if (!inEdge && edgeHandler != null) {
+                                                        edgeHandler?.let { viewHandler.removeCallbacks(it) }
+                                                        edgeHandler = null
                                                     }
                                                 }
                                             }
                                         } while (true)
                                     } finally {
                                         cursorGestureActive.value = false
+                                        edgeHandler?.let { viewHandler.removeCallbacks(it) }
+                                        edgeHandler = null
                                     }
                                 }
                             }
