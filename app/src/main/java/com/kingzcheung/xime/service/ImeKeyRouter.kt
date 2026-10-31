@@ -740,16 +740,22 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         // 回删替换也会破坏受限宿主的输入。NO_SUGGESTIONS 只是宿主
                         // 不要内联补全，候选栏联想仍提供（与退格/applyComposition 路径同口径）。
                         val secret = service.isSecretEditor()
+                        // 内置快捷发送：编码命中（组合编码/待确认英文）与内容命中（条目以候选开头）
+                        val nativeQuick = if (secret) emptyList() else service.quickSendNativeMatches(
+                            codes = listOf(capturedInputText, pendingEnglish),
+                            engineCandidates = filteredTexts,
+                        )
                         service.candidateState.value = service.candidateState.value.copy(
                             inputText = capturedInputText,
-                            candidates = filteredTexts,
-                            candidateComments = filteredComments,
+                            candidates = filteredTexts + nativeQuick,
+                            candidateComments = filteredComments + nativeQuick.map { "" },
                             isComposing = capturedInputText.isNotEmpty(),
                             associationCandidates = if (secret || ((capturedIsAscii || !service.isChineseMode) && pendingEnglish.isEmpty())) emptyList() else service.candidateState.value.associationCandidates,
                             isShowingRecentClipboard = false,
                             hasNextPage = capturedHasNext,
                             hasPrevPage = capturedHasPrev,
-                            candidateActions = transformed?.actions ?: emptyList()
+                            candidateActions = (transformed?.actions ?: emptyList()) +
+                                nativeQuick.map { com.kingzcheung.xime.service.CandidateAction.plugin(it) }
                         )
                         if (capturedIsAscii != service.uiState.value.isAsciiMode) {
                             FileLogger.i(XimeInputMethodService.TAG, "keyRouter UI refresh: ascii ${service.uiState.value.isAsciiMode}->$capturedIsAscii")
@@ -762,7 +768,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                     val current = service.candidateState.value
                                     // 在途联想过期校验：pendingEnglish 已变/已清 → 丢弃迟到回填
                                     if (current.pendingEnglishText == pendingEnglish) {
-                                        service.candidateState.value = current.copy(associationCandidates = candidates)
+                                        // 内置快捷发送：编码前缀命中的短语插在联想最前
+                                        //（点选走 onAssociationSelect 的回删替换，已打的编码被短语覆盖）
+                                        val native = service.quickSendNativeMatches(
+                                            codes = listOf(pendingEnglish), engineCandidates = emptyList()
+                                        )
+                                        service.candidateState.value = current.copy(
+                                            associationCandidates = native + candidates
+                                        )
                                     }
                                 }
                             }
