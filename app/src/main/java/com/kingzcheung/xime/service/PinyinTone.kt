@@ -110,8 +110,8 @@ object PinyinTone {
                 continue
             }
             // 无调：与对齐的汉字查表（默认读音与注释一致才标）
-            val ch = if (aligned) chars.getOrNull(i) ?: "" else ""
-            val entry = tbl[ch]
+            val ch = if (aligned && i < chars.length) chars[i].toString() else ""
+            val entry = if (ch.isEmpty()) null else tbl[ch]
             if (entry == null || entry[0] != tk) { out.add(tokens[i]); continue }
             if (entry[2] != tokens[i]) changed = true
             out.add(entry[2])
