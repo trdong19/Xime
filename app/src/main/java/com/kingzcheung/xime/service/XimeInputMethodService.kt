@@ -3264,6 +3264,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             mainHandler.post { onBackspaceSweepRestoreOne() }
             return
         }
+        // 先结算在途删除（长按连删/单击尚未记账的差值入撤销槽）——
+        // 保证右滑回捡的数据是"最近一次删除"的内容，而非更早的旧账
+        if (deleteSessionActive) finishDeleteSession()
         val cs = candidateState.value
         val hasInput = cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
             cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()

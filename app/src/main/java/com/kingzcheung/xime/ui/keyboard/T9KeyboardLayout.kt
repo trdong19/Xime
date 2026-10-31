@@ -766,8 +766,16 @@ private fun T9KeyboardContent(
                 onSwipeDown = { onKeyPress("undo_clear") },
                 onSwipeLeft = { onKeyPress("clear_composition") },
                 onSweepStep = { step ->
-                    if (step < 0) onDelete()
-                    else callbacks.onBackspaceSweepRestoreOne?.invoke()
+                    val cs = candidateState.value
+                    val hasInput = cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
+                        cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
+                    if (step < 0) {
+                        // 组合态：T9 引擎链路删编码（含 flush/undone 消费）；
+                        // 空闲态：走 service 记录被删字符（右滑恢复的数据源）
+                        if (hasInput) onDelete() else service.onBackspaceSweepDeleteStep()
+                    } else {
+                        callbacks.onBackspaceSweepRestoreOne?.invoke()
+                    }
                 },
                 onSweepEnd = { callbacks.onBackspaceSweepFinish?.invoke() },
                 onSwipeStateChange = { state, bounds ->
