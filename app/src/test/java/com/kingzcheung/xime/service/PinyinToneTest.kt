@@ -65,7 +65,11 @@ class PinyinToneTest {
 
     @Test
     fun `特殊音节 嗯`() {
-        assertEquals("ń", PinyinTone.annotateWith(tbl, "嗯", "n2"))
+        println("诊断: tbl嗯=" + tbl["嗯"]?.contentToString())
+        println("诊断: aligned判定 tokens=1 chars=" + "嗯".filter { it.code in 0x4E00..0x9FFF }.length)
+        val r = PinyinTone.annotateWith(tbl, "嗯", "n2")
+        println("诊断: annotateWith=" + r)
+        assertEquals("ń", r)
     }
 
     @Test
