@@ -71,6 +71,7 @@ import com.kingzcheung.xime.keyboard.isBuiltinToolbarButtonAvailable
 import com.kingzcheung.xime.keyboard.resolveToolbarButtonItem
 import com.kingzcheung.xime.rime.T9InputController
 import com.kingzcheung.xime.service.CandidateState
+import com.kingzcheung.xime.service.PinyinTone
 import com.kingzcheung.xime.service.ExpandedCandidatePager
 import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.SettingsPreferences
@@ -723,8 +724,9 @@ fun KeyboardView(
                     ).map { row ->
                         row.map { gi ->
                             val c = allExpanded[gi]
-                            // T9 注释覆盖按文本回填（显示用；点选定位走 globalIndex 原注释）
-                            CandidateEntry(c.text, cs.t9CommentOverrides[c.text] ?: c.comment, gi)
+                            // 注释声调（内置）+ T9 插件覆盖按文本回填（显示用；点选定位走 globalIndex 原注释）
+                            val toned = PinyinTone.annotate(c.text, c.comment) ?: c.comment
+                            CandidateEntry(c.text, cs.t9CommentOverrides[c.text] ?: toned, gi)
                         }
                     }
                 }

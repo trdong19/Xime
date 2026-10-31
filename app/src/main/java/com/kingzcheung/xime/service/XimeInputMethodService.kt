@@ -679,6 +679,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     override fun onCreate() {
         super.onCreate()
+        // 内置拼音声调标注：加载全量字表（assets/pinyin_tone.tsv）
+        PinyinTone.init(this)
         // 允许 IME 窗口绘制到摄像头挖孔/刘海区域（横屏时背景覆盖全屏）
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             window.window?.attributes?.layoutInDisplayCutoutMode =
@@ -3297,6 +3299,26 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         sweepRemovedChars.clear()
         finishDeleteSession()
+    }
+
+    /**
+     * 内置快捷发送匹配（宿主原生，不依赖插件）：编码前缀命中（[codes] 任一以条目
+     * 触发编码开头，兼容 T9 数字码/字母码与 ascii 字母码）或内容命中（条目文本以
+     * 引擎候选开头）。返回命中的短语文本列表（纯内存，≤2000 条线性扫描）。
+     */
+    internal fun quickSendNativeMatches(codes: List<String>, engineCandidates: List<String>): List<String> {
+        val items = quickSendItemsState.value
+        if (items.isEmpty()) return emptyList()
+        val out = ArrayList<String>()
+        for (item in items) {
+            val code = item.code?.takeIf { it.isNotEmpty() }
+            val codeHit = code != null && codes.any { it.isNotEmpty() && it.startsWith(code) }
+            val contentHit = engineCandidates.any { it.isNotEmpty() && item.text.startsWith(it) }
+            if (codeHit || contentHit) {
+                if (item.text !in out) out.add(item.text)
+            }
+        }
+        return out
     }
 
     /**

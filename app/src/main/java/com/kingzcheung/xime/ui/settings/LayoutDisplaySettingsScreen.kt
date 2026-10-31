@@ -249,6 +249,30 @@ fun LayoutDisplaySettingsContent(
                         )
                     }
 
+                    var pinyinToneEnabled by remember {
+                        mutableStateOf(SettingsPreferences.getPinyinToneEnabled(context))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = tr(R.string.s_bianmazhushi), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = tr(R.string.s_zaihouxuancipangxianshiduiying_de529) + "（nǐ hǎo 形式，需启用候选注释）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = pinyinToneEnabled,
+                            onCheckedChange = { enabled ->
+                                pinyinToneEnabled = enabled
+                                SettingsPreferences.setPinyinToneEnabled(context, enabled)
+                            }
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     HorizontalDivider(

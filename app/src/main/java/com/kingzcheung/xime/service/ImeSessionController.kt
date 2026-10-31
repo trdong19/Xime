@@ -53,6 +53,17 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         } else {
             filteredTexts to filteredComments
         }
+        // 内置拼音声调标注（设置开关）：显示注释转带调（右选定位注释另存引擎原值，不受影响）
+        val pinyinToneOn = SettingsPreferences.getPinyinToneEnabled(service)
+        fun applyToneComments(texts: List<String>, comments: List<String>): List<String> =
+            if (!pinyinToneOn || !PinyinTone.isReady()) comments
+            else comments.mapIndexed { i, c ->
+                texts.getOrNull(i)?.let { PinyinTone.annotate(it, c) } ?: c
+            }
+        val displayToneComments = applyToneComments(
+            if (isT9Schema) t9FilteredTexts else filteredTexts,
+            if (isT9Schema) t9FilteredComments else filteredComments,
+        )
         val displayText: String
         val displayCandidates: List<String>
         val displayComments: List<String>
@@ -75,7 +86,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             )
             // preedit 转换由 C++ t9_filter 完成，Kotlin 侧直接使用引擎输出的 preedit
             val display = buildT9DisplayState(
-                service.t9PartialSegments.map { it.text }, rawPreedit, inputText, t9FilteredTexts, t9FilteredComments
+                service.t9PartialSegments.map { it.text }, rawPreedit, inputText, t9FilteredTexts, displayToneComments
             )
             displayText = display.displayText
             // T9 插件候选按引擎锚点插入（transformForT9 已把插件输出顺序折叠为
@@ -84,6 +95,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // 不实际消费 engineIndex，仅用于插件候选分流）
             val baseCands = display.displayCandidates
             val baseComments = display.displayComments
+            // overriddenBaseComments 的兜底值基于转换后注释（baseComments 已含声调）
             // T9 插件注释覆盖（candidate_transform）：按候选文本匹配回填显示注释
             //（T9 展示态可能截断/重排候选，文本匹配对索引错位免疫；未命中的候选
             // 保留引擎原注释）。插件候选自身的注释由 injection.snapshot 携带。
@@ -105,7 +117,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 }
                 mergedCands.add(cand)
                 mergedComments.add(overriddenBaseComments.getOrElse(idx) { "" })
-                engineComments.add(baseComments.getOrElse(idx) { "" })
+                engineComments.add(t9FilteredComments.getOrElse(idx) { "" })
                 mergedActions.add(CandidateAction.engine(idx))
             }
             byAnchor[null]?.forEach { inj ->
@@ -113,6 +125,17 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 mergedComments.add(inj.snapshot.comment)
                 engineComments.add("")
                 mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
+            }
+            // 内置快捷发送：编码命中（T9 数字码 input / 字母码 preedit）与内容命中，
+            // 候选末尾追加（点击走 plugin 分支直接上屏）
+            for (phrase in service.quickSendNativeMatches(
+                codes = listOf(inputText, rawPreedit, pendingEnglish),
+                engineCandidates = baseCands,
+            )) {
+                mergedCands.add(phrase)
+                mergedComments.add("")
+                engineComments.add("")
+                mergedActions.add(CandidateAction.plugin(phrase))
             }
             displayCandidates = mergedCands
             displayComments = mergedComments
@@ -125,8 +148,12 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // 不能混入回显字符。历史上曾整体用 input 规避自装双拼插件的展开编码显示，
             // 代价是全拼丢失分隔符；现仅显示层恢复 librime 标准回显。
             displayText = if (preeditText.isNotEmpty()) preeditText else inputText
-            displayCandidates = filteredTexts
-            displayComments = filteredComments
+            val nativeQuick = service.quickSendNativeMatches(
+                codes = listOf(inputText, preeditText, pendingEnglish),
+                engineCandidates = filteredTexts,
+            )
+            displayCandidates = filteredTexts + nativeQuick
+            displayComments = displayToneComments + nativeQuick.map { "" }
             isComposing = inputText.isNotEmpty()
         }
 
@@ -146,8 +173,9 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             isShowingRecentClipboard = false,
             hasNextPage = hasNextPage,
             hasPrevPage = hasPrevPage,
-            // 候选词变换映射（全键盘 pluginActions / T9 平行 actions；防御空）
-            candidateActions = if (isT9Schema) t9CandidateActions else pluginActions,
+            // 候选词变换映射（全键盘 pluginActions + native 快捷发送 / T9 平行 actions；防御空）
+            candidateActions = if (isT9Schema) t9CandidateActions
+            else pluginActions + nativeQuick.map { CandidateAction.plugin(it) },
             // T9 右选定位注释（引擎原注释）；非 T9 显式清空防跨模式残留错位
             t9EngineComments = if (isT9Schema) mergedEngineComments else emptyList(),
             // T9 显示注释覆盖表（供候选展开页 CandidatePage 回填，key=候选文本）
@@ -170,7 +198,14 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                     // 在途联想过期校验：pendingEnglish 已变/已清（如点击候选栏"清空"）→
                     // 丢弃迟到回填，防止"清了又冒出来"与旧联想覆盖新联想的竞态
                     if (current.pendingEnglishText == pendingEnglish) {
-                        service.candidateState.value = current.copy(associationCandidates = candidates)
+                        // 内置快捷发送：编码前缀命中的短语插在联想最前
+                        //（点选走 onAssociationSelect 的回删替换，已打的编码被短语替换）
+                        val native = service.quickSendNativeMatches(
+                            codes = listOf(pendingEnglish), engineCandidates = emptyList()
+                        )
+                        service.candidateState.value = current.copy(
+                            associationCandidates = native + candidates
+                        )
                     }
                 }
             }
@@ -338,7 +373,14 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                     val current = service.candidateState.value
                     // 在途联想过期校验：pendingEnglish 已变/已清 → 丢弃迟到回填
                     if (current.pendingEnglishText == pendingEnglish) {
-                        service.candidateState.value = current.copy(associationCandidates = candidates)
+                        // 内置快捷发送：编码前缀命中的短语插在联想最前
+                        //（点选走 onAssociationSelect 的回删替换，已打的编码被短语替换）
+                        val native = service.quickSendNativeMatches(
+                            codes = listOf(pendingEnglish), engineCandidates = emptyList()
+                        )
+                        service.candidateState.value = current.copy(
+                            associationCandidates = native + candidates
+                        )
                     }
                 }
             }

@@ -121,6 +121,7 @@ object SettingsPreferences {
 
     private const val KEY_COMPACT_MODE = "compact_mode"
     private const val KEY_SHOW_CANDIDATE_COMMENTS = "show_candidate_comments"
+    private const val KEY_PINYIN_TONE_ENABLED = "pinyin_tone_enabled"
     private const val KEY_INPUT_TEXT_LOCATION = "input_text_location"
     private const val KEY_PAGE_SIZE = "page_size"
     private const val KEY_CANDIDATE_TEXT_SIZE = "candidate_text_size"
@@ -142,6 +143,15 @@ object SettingsPreferences {
 
     fun setShowCandidateComments(context: Context, show: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SHOW_CANDIDATE_COMMENTS, show).apply()
+    }
+
+    /** 拼音注释显示声调（内置 PinyinTone，ni hao → nǐ hǎo）。默认开启。 */
+    fun getPinyinToneEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_PINYIN_TONE_ENABLED, true)
+    }
+
+    fun setPinyinToneEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PINYIN_TONE_ENABLED, enabled).apply()
     }
 
     fun getInputTextLocation(context: Context): String {
