@@ -19,55 +19,61 @@ class PinyinToneTest {
         "贵" to arrayOf("gui", "gui4", "guì"),
     )
 
+    /** 与 annotateWith 同源的音节映射 fixture */
+    private val toneSyllable = tbl.entries.associate { (ch, arr) ->
+        val digit = arr[1].lastOrNull()?.takeIf { it in '1'..'5' } ?: '0'
+        (arr[0] + digit) to arr[2]
+    }
+
     @Test
     fun `数字调精确转换`() {
-        assertEquals("nǐ hǎo", PinyinTone.annotateWith(tbl, "你好", "ni3 hao3"))
+        assertEquals("nǐ hǎo", PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "你好", "ni3 hao3"))
     }
 
     @Test
     fun `无调对齐字表标注`() {
-        assertEquals("nǐ hǎo", PinyinTone.annotateWith(tbl, "你好", "ni hao"))
+        assertEquals("nǐ hǎo", PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "你好", "ni hao"))
     }
 
     @Test
     fun `多音字读音不一致保守原样`() {
         // 行 注释 xing（默认读音匹配 → 标注）
-        assertEquals("xíng", PinyinTone.annotateWith(tbl, "行", "xing"))
+        assertEquals("xíng", PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "行", "xing"))
         // 注释 hang（多音字另一读音，字表默认 xing 不一致 → 原样）
-        assertNull(PinyinTone.annotateWith(tbl, "行", "hang"))
+        assertNull(PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "行", "hang"))
     }
 
     @Test
     fun `轻声不标调`() {
-        assertNull(PinyinTone.annotateWith(tbl, "的", "de"))
+        assertNull(PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "的", "de"))
     }
 
     @Test
     fun `英文注释不标注`() {
-        assertNull(PinyinTone.annotateWith(tbl, "hello", "hello"))
+        assertNull(PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "hello", "hello"))
     }
 
     @Test
     fun `已带调注释原样`() {
-        assertNull(PinyinTone.annotateWith(tbl, "你好", "nǐ hǎo"))
+        assertNull(PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "你好", "nǐ hǎo"))
     }
 
     @Test
     fun `iu ui 标在后元音`() {
-        assertEquals("liú", PinyinTone.annotateWith(tbl, "流", "liu2"))
-        assertEquals("guì", PinyinTone.annotateWith(tbl, "贵", "gui4"))
+        assertEquals("liú", PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "流", "liu2"))
+        assertEquals("guì", PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "贵", "gui4"))
     }
 
     @Test
     fun `v 转 ü`() {
-        assertEquals("lǚ", PinyinTone.annotateWith(tbl, "旅", "lv3"))
+        assertEquals("lǚ", PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "旅", "lv3"))
     }
 
     @Test
     fun `特殊音节 嗯`() {
         println("诊断: tbl嗯=" + tbl["嗯"]?.contentToString())
         println("诊断: aligned判定 tokens=1 chars=" + "嗯".filter { it.code in 0x4E00..0x9FFF }.length)
-        val r = PinyinTone.annotateWith(tbl, "嗯", "n2")
+        val r = PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "嗯", "n2")
         println("诊断: annotateWith=" + r)
         assertEquals("ń", r)
     }
@@ -75,6 +81,6 @@ class PinyinToneTest {
     @Test
     fun `多字词部分对齐失败则整条原样`() {
         // "你好吗" 3 字 vs 2 音节 → 对齐失败，"吗"不在表 → 原样
-        assertNull(PinyinTone.annotateWith(tbl, "你好吗", "ni hao"))
+        assertNull(PinyinTone.annotateWith(tbl, toneSyllable = toneSyllable, text = "你好吗", "ni hao"))
     }
 }
