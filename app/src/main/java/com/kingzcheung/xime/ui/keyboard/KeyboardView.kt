@@ -845,11 +845,11 @@ fun KeyboardView(
                         val viewHandler = android.os.Handler(android.os.Looper.getMainLooper())
                         var edgeHandler: Runnable? = null
                         var edgeDir = 0
-                        val jumpThresholdPx = 40.dp.toPx()
                         val cursorMod = if (callbacks.onCursorMove != null) {
                             Modifier.pointerInput(Unit) {
                                 val stepThresholdPx = 25.dp.toPx()
                                 val activationThresholdPx = 60.dp.toPx()
+                                val jumpThresholdPx = 40.dp.toPx()
                                 awaitEachGesture {
                                     suppressCursorMove.value = false
                                     cursorGestureActive.value = false
