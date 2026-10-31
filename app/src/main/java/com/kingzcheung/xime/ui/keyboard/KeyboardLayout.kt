@@ -327,6 +327,7 @@ fun KeyboardLayout(
                         onBackspaceSweepDeleteStep = callbacks.onBackspaceSweepDeleteStep,
                         onBackspaceSweepRestoreOne = callbacks.onBackspaceSweepRestoreOne,
                         onBackspaceSweepFinish = callbacks.onBackspaceSweepFinish,
+            onBackspaceSweepActivate = callbacks.onBackspaceSweepActivate,
                         onKeyRelease = onKeyRelease,
                         onCommitText = onCommitText,
                         onGestureAction = onGestureAction,
@@ -619,6 +620,7 @@ internal class QwertyRowEnv(
     val onBackspaceSweepDeleteStep: (() -> Unit)? = null,
     val onBackspaceSweepRestoreOne: (() -> Unit)? = null,
     val onBackspaceSweepFinish: (() -> Unit)? = null,
+    val onBackspaceSweepActivate: (() -> Unit)? = null,
 )
 
 /** 功能键列宽：显式 `keys.<id>.width` 优先，否则内置默认。 */
@@ -1300,6 +1302,7 @@ private fun DeleteCell(env: QwertyRowEnv, modifier: Modifier) {
             }
         },
         onSweepEnd = env.onBackspaceSweepFinish?.let { fin -> { fin() } },
+        onSweepActivate = env.onBackspaceSweepActivate?.let { act -> { act() } },
         onSwipeStateChange = { state, bounds -> env.processSwipeState(state, bounds) },
         shadowEnabled = env.shadowEnabled,
         shadowElevation = env.shadowElevation,
@@ -2085,6 +2088,7 @@ private fun LandscapeKeyboardContent(
         onBackspaceSweepDeleteStep = callbacks.onBackspaceSweepDeleteStep,
         onBackspaceSweepRestoreOne = callbacks.onBackspaceSweepRestoreOne,
         onBackspaceSweepFinish = callbacks.onBackspaceSweepFinish,
+            onBackspaceSweepActivate = callbacks.onBackspaceSweepActivate,
         onKeyRelease = onKeyRelease,
         onCommitText = onCommitText,
         onGestureAction = onGestureAction,
