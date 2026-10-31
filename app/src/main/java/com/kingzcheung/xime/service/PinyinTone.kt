@@ -104,7 +104,14 @@ object PinyinTone {
             val digit = tk.last()
             if (digit in '1'..'5') {
                 val base = tk.dropLast(1)
-                val t = applyTone(base, digit - '0')
+                val tone = digit - '0'
+                // 优先对齐字表的符号调（覆盖 ń 等无元音的特殊音节，规则算不出）；
+                // 无对齐/表缺时回退规则计算
+                val t = if (aligned) {
+                    val ch = chars.getOrNull(i) ?: ""
+                    tbl[ch]?.takeIf { it[0] == base && it[1].last() == digit }?.get(2)
+                        ?: applyTone(base, tone)
+                } else applyTone(base, tone)
                 if (t != tokens[i]) changed = true
                 out.add(t)
                 continue
