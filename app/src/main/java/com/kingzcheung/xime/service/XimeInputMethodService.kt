@@ -3276,7 +3276,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     val removedLetters = codeBefore.substring(cur.length)
                     for (c in removedLetters) {
                         val digit = t9KeyMap[c.lowercaseChar()] ?: continue
-                        rimeEngine.processKey(('0' + (digit - '0')).code, 0)
+                        rimeEngine.processKey(('0' + (digit.first() - '0')).code, 0)
                     }
                 }
                 sweepCodeBefore = null
