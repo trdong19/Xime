@@ -347,6 +347,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * [lastClearedText] 尾字符（逐字回捡上一个删除会话删掉的内容）。
      */
     private val sweepRemovedChars = ArrayDeque<String>()
+    /** 退格滑动（组合态）删除会话开始时的编码快照：右滑恢复时用它计算被删的字母串。null=无待恢复。 */
+    private var sweepCodeBefore: String? = null
     /**
      * 撤销落点锚：删除会话入账（[finishDeleteSession]）时光标前的文本（窗口读取，
      * 见 [UNDO_TEXT_WINDOW]）。下滑撤回前校验光标前文本未变，避免用户随后打过字 /
@@ -3237,11 +3239,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return
         }
         // 组合态口径与 ImeKeyRouter.hasInputState 对齐（编码/待确认英文/T9 部分段均算），
-        // 走既有单击退格链路（含 T9 引擎消费），右滑恢复在组合态无语义
+        // 走既有单击退格链路（含 T9 引擎消费）；组合态右滑可恢复被删编码（见 restoreOne）
         val cs = candidateState.value
         if (cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
             cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
         ) {
+            if (sweepCodeBefore == null) sweepCodeBefore = cs.preeditText
             keyboardCallbacks?.onKeyPress("delete", false)
             return
         }
@@ -3262,10 +3265,23 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return
         }
         val cs = candidateState.value
-        if (cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
+        val hasInput = cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
             cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
-        ) {
-            return  // 组合态恢复无语义（编码可重打）
+        if (hasInput) {
+            // 组合态右滑：恢复本滑动会话删掉的编码（字母串 → 数字键逐个放回引擎）
+            val codeBefore = sweepCodeBefore
+            if (codeBefore != null) {
+                val cur = cs.preeditText
+                if (codeBefore.startsWith(cur) && codeBefore.length > cur.length) {
+                    val removedLetters = codeBefore.substring(cur.length)
+                    for (c in removedLetters) {
+                        val digit = t9KeyMap[c.lowercaseChar()] ?: continue
+                        rimeEngine.processKey(('0' + (digit - '0')).code, 0)
+                    }
+                }
+                sweepCodeBefore = null
+            }
+            return
         }
         val ch = sweepRemovedChars.removeLastOrNull()
         if (ch != null) {
