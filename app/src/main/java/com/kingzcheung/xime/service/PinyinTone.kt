@@ -18,6 +18,8 @@ object PinyinTone {
 
     /** 字 -> [无调, 数字调, 符号调] */
     private val table = HashMap<String, Array<String>>(24500)
+    /** 音节+调号 → 符号调（"ni3"→"nǐ"、"n2"→"ń"）；init 时从 table 预计算。 */
+    private val toneSyllable = HashMap<String, String>(8000)
     @Volatile
     private var initialized = false
 
@@ -43,6 +45,11 @@ object PinyinTone {
                             table[parts[0]] = arrayOf(parts[1], parts[2], parts[3])
                         }
                     }
+                }
+                // 预计算音节→符号调映射（数字调路径 O(1) 查询，覆盖 ń 等特殊音节）
+                for (arr in table.values) {
+                    val digit = arr[1].lastOrNull()?.takeIf { it in '1'..'5' } ?: continue
+                    toneSyllable[arr[0] + digit] = arr[2]
                 }
                 initialized = true
             }
@@ -86,10 +93,15 @@ object PinyinTone {
      * 返回带调注释；无需标注/无法标注返回 null（调用方保留原注释）。
      */
     fun annotate(text: String, comment: String): String? =
-        if (!initialized) null else annotateWith(table, text, comment)
+        if (!initialized) null else annotateWith(table, text, comment, toneSyllable)
 
     /** 纯函数版本（可 JVM 单测）：[tbl] 为 字 -> [无调, 数字调, 符号调]。 */
-    internal fun annotateWith(tbl: Map<String, Array<String>>, text: String, comment: String): String? {
+    internal fun annotateWith(
+        tbl: Map<String, Array<String>>,
+        text: String,
+        comment: String,
+        toneSyllable: Map<String, String>,
+    ): String? {
         if (comment.isEmpty() || TONE_CHAR_RE.containsMatchIn(comment)) return null
         val tokens = comment.split(' ', '\'', '·', '-', '’').filter { it.isNotEmpty() }
         if (tokens.isEmpty()) return null
@@ -105,13 +117,9 @@ object PinyinTone {
             if (digit in '1'..'5') {
                 val base = tk.dropLast(1)
                 val tone = digit - '0'
-                // 优先对齐字表的符号调（覆盖 ń 等无元音的特殊音节，规则算不出）；
-                // 无对齐/表缺时回退规则计算
-                val t = if (aligned) {
-                    val ch = chars.getOrNull(i) ?: ""
-                    tbl[ch]?.takeIf { it[0] == base && it[1].last() == digit }?.get(2)
-                        ?: applyTone(base, tone)
-                } else applyTone(base, tone)
+                // 数字调路径：直接查音节映射（tk 含调号，O(1)，覆盖 ń 等特殊音节；
+                // 表缺时回退规则计算——无元音音节如 ń 规则算不出但映射表有）
+                val t = toneSyllable[tk] ?: applyTone(base, tone)
                 if (t != tokens[i]) changed = true
                 out.add(t)
                 continue
