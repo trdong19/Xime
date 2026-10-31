@@ -3292,6 +3292,20 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * 未触发时首次 deleteOne 已补开）——下滑撤回（undo_clear）对滑动删除的
      * 净删除照常生效。
      */
+    /**
+     * 退格滑动激活：结算当前删除会话（长按连删/单击已删的内容入撤销槽），
+     * 并为滑动开启新账——此后右滑恢复回捡的是「本手势之前删掉的内容」，
+     * 与滑动中删除的字符互不污染。
+     */
+    internal fun onBackspaceSweepActivate() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { onBackspaceSweepActivate() }
+            return
+        }
+        finishDeleteSession()
+        beginDeleteSession()
+    }
+
     internal fun onBackspaceSweepFinish() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post { onBackspaceSweepFinish() }
@@ -3306,6 +3320,19 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * 触发编码开头，兼容 T9 数字码/字母码与 ascii 字母码）或内容命中（条目文本以
      * 引擎候选开头）。返回命中的短语文本列表（纯内存，≤2000 条线性扫描）。
      */
+    /** 标准九键字母→数字映射（T9 触发编码匹配用） */
+    private val t9KeyMap = mapOf(
+        'a' to "2", 'b' to "2", 'c' to "2", 'd' to "3", 'e' to "3", 'f' to "3",
+        'g' to "4", 'h' to "4", 'i' to "4", 'j' to "5", 'k' to "5", 'l' to "5",
+        'm' to "6", 'n' to "6", 'o' to "6", 'p' to "7", 'q' to "7", 'r' to "7", 's' to "7",
+        't' to "8", 'u' to "8", 'v' to "8", 'w' to "9", 'x' to "9", 'y' to "9", 'z' to "9",
+    )
+
+    internal fun codeToT9Digits(code: String): String? =
+        if (code.isNotEmpty() && code.all { it.lowercaseChar() in t9KeyMap }) {
+            code.lowercase().mapNotNull { t9KeyMap[it.lowercaseChar()] }.joinToString("")
+        } else null
+
     internal fun quickSendNativeMatches(codes: List<String>, engineCandidates: List<String>): List<String> {
         val items = quickSendItemsState.value
         if (items.isEmpty()) return emptyList()
@@ -3313,8 +3340,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         for (item in items) {
             val code = item.code?.takeIf { it.isNotEmpty() }
             val codeHit = code != null && codes.any { it.isNotEmpty() && it.startsWith(code) }
+            // T9 数字码匹配：字母触发码转数字后与九键数字编码比对（"ld"→"53"）
+            val digitHit = code != null && codeToT9Digits(code)?.let { digits ->
+                codes.any { it.isNotEmpty() && it.startsWith(digits) }
+            } == true
             val contentHit = engineCandidates.any { it.isNotEmpty() && item.text.startsWith(it) }
-            if (codeHit || contentHit) {
+            if (codeHit || digitHit || contentHit) {
                 if (item.text !in out) out.add(item.text)
             }
         }

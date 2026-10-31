@@ -400,6 +400,9 @@ internal fun rememberImeKeyboardCallbacks(
             onBackspaceSweepFinish = {
                 service.onBackspaceSweepFinish()
             },
+            onBackspaceSweepActivate = {
+                service.onBackspaceSweepActivate()
+            },
             onT9SwitchAway = {
                 service.keyRouter.postRimeJob {
                     service.sessionController.commitFirstCandidateAndClearT9()

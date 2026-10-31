@@ -129,15 +129,19 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
             }
             // 内置快捷发送：编码命中（T9 数字码 input / 字母码 preedit）与内容命中，
-            // 候选末尾追加（点击走 plugin 分支直接上屏）
-            for (phrase in service.quickSendNativeMatches(
+            // 插在第一候选之后（第二候选位，避免被候选栏折叠隐藏）
+            val nativeQuickT9 = service.quickSendNativeMatches(
                 codes = listOf(inputText, rawPreedit, pendingEnglish),
                 engineCandidates = baseCands,
-            )) {
-                mergedCands.add(phrase)
-                mergedComments.add("")
-                engineComments.add("")
-                mergedActions.add(CandidateAction.plugin(phrase))
+            )
+            if (nativeQuickT9.isNotEmpty() && mergedCands.isNotEmpty()) {
+                val insertAt = minOf(1, mergedCands.size)
+                for ((k, phrase) in nativeQuickT9.withIndex()) {
+                    mergedCands.add(insertAt + k, phrase)
+                    mergedComments.add(insertAt + k, "")
+                    engineComments.add(insertAt + k, "")
+                    mergedActions.add(insertAt + k, CandidateAction.plugin(phrase))
+                }
             }
             displayCandidates = mergedCands
             displayComments = mergedComments
@@ -155,8 +159,15 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 engineCandidates = filteredTexts,
             )
             nativeQuickActions = nativeQuick.map { CandidateAction.plugin(it) }
-            displayCandidates = filteredTexts + nativeQuick
-            displayComments = displayToneComments + nativeQuick.map { "" }
+            // 编码命中插第二候选位（可见性）；内容命中追加末尾
+            val nativeHead = nativeQuick.take(1)
+            val nativeTail = nativeQuick.drop(1)
+            displayCandidates = if (nativeHead.isNotEmpty() && filteredTexts.isNotEmpty())
+                listOf(filteredTexts.first()) + nativeHead + filteredTexts.drop(1) + nativeTail
+                else filteredTexts + nativeTail
+            displayComments = if (nativeHead.isNotEmpty() && filteredTexts.isNotEmpty())
+                listOf(displayToneComments.firstOrNull() ?: "") + nativeHead.map { "" } + displayToneComments.drop(1) + nativeTail.map { "" }
+                else displayToneComments + nativeTail.map { "" }
             isComposing = inputText.isNotEmpty()
         }
 

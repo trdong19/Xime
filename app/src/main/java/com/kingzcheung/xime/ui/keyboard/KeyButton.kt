@@ -1265,6 +1265,8 @@ fun SwipeableIconKeyButton(
      */
     onSweepStep: ((Int) -> Unit)? = null,
     onSweepEnd: (() -> Unit)? = null,
+    /** 滑动模式激活回调（首次跨过接管阈值）：结算既有删除会话并开启滑动新账 */
+    onSweepActivate: (() -> Unit)? = null,
     sweepStepDp: Float = 10f,
     /**
      * 长按是否连发（每 30ms 重复）。删除键为 true（长按连删）；
@@ -1302,6 +1304,7 @@ fun SwipeableIconKeyButton(
     var sweepAccum by remember { mutableStateOf(0f) }
     val currentOnSweepStep by rememberUpdatedState(onSweepStep)
     val currentOnSweepEnd by rememberUpdatedState(onSweepEnd)
+    val currentOnSweepActivate by rememberUpdatedState(onSweepActivate)
     // 本次手势的横向净位移峰值（父层光标手势同口径）
     var gesturePeakDx by remember { mutableStateOf(0f) }
     // 本次手势按下点（局部坐标）
@@ -1554,6 +1557,8 @@ fun SwipeableIconKeyButton(
                             ) {
                                 sweepMode = true
                                 isLongPress = false
+                                // 激活即结算既有删除会话（连删/单击已删的入撤销槽）并开启滑动新账
+                                currentOnSweepActivate?.invoke()
                             }
                             if (sweepMode) {
                                 sweepAccum += dragAmount.x

@@ -127,6 +127,8 @@ data class KeyboardCallbacks(
     var onBackspaceSweepRestoreOne: (() -> Unit)? = null,
     /** 退格滑动抬手结算（删除会话记账 + 字符栈清空）。 */
     var onBackspaceSweepFinish: (() -> Unit)? = null,
+    /** 退格滑动激活（结算既有删除会话 + 开滑动新账）。 */
+    var onBackspaceSweepActivate: (() -> Unit)? = null,
     val onShowQuickSendForm: (() -> Unit)? = null,
     /**
      * 从剪贴板面板主动拉取远端剪贴板内容（仅剪贴板同步已启用时非空）。
