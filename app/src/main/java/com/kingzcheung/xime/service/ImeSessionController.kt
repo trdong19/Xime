@@ -71,6 +71,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         var t9CandidateActions: List<CandidateAction> = emptyList()
         /** T9 右选定位注释（引擎原注释，与 displayCandidates 平行）；非 T9 为空。 */
         var mergedEngineComments: List<String> = emptyList()
+        /** QWERTY/ascii 模式下内置快捷发送命中的短语（与 displayCandidates 尾部平行）；非该模式为空。 */
+        var nativeQuickActions: List<CandidateAction> = emptyList()
         if (isT9Schema) {
             // T9 编码显示永不回退原始数字 input：preedit 缺失，或含未转换数字
             //（合成切不出词时引擎把原始输入当编码回退，如全拼+简拼混合态）时，
@@ -152,6 +154,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 codes = listOf(inputText, preeditText, pendingEnglish),
                 engineCandidates = filteredTexts,
             )
+            nativeQuickActions = nativeQuick.map { CandidateAction.plugin(it) }
             displayCandidates = filteredTexts + nativeQuick
             displayComments = displayToneComments + nativeQuick.map { "" }
             isComposing = inputText.isNotEmpty()
@@ -175,7 +178,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             hasPrevPage = hasPrevPage,
             // 候选词变换映射（全键盘 pluginActions + native 快捷发送 / T9 平行 actions；防御空）
             candidateActions = if (isT9Schema) t9CandidateActions
-            else pluginActions + nativeQuick.map { CandidateAction.plugin(it) },
+            else pluginActions + nativeQuickActions,
             // T9 右选定位注释（引擎原注释）；非 T9 显式清空防跨模式残留错位
             t9EngineComments = if (isT9Schema) mergedEngineComments else emptyList(),
             // T9 显示注释覆盖表（供候选展开页 CandidatePage 回填，key=候选文本）

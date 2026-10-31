@@ -53,7 +53,7 @@ object PinyinTone {
 
     /** 调号应标的字符位置：a 优先 → o/e 取后出现的 → 否则最后出现的 i/u/v（liú/guì）。 */
     private fun toneMarkIndex(syllable: String): Int {
-        var ai = -1; var oe = -1; var glide = -1
+        var ai = -1; var oe = -1; var ei = -1; var glide = -1
         for (i in syllable.indices) {
             when (val c = syllable[i]) {
                 'a' -> if (ai < 0) ai = i
