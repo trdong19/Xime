@@ -768,11 +768,12 @@ private fun T9KeyboardContent(
                 onSweepStep = { step ->
                     val cs = candidateState.value
                     val hasInput = cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
-                        cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
+                        cs.pendingEnglishText.isNotEmpty()
                     if (step < 0) {
                         // 组合态：T9 引擎链路删编码（含 flush/undone 消费）；
-                        // 空闲态：走 service 记录被删字符（右滑恢复的数据源）
-                        if (hasInput) onDelete() else service.onBackspaceSweepDeleteStep()
+                        // 空闲态：单击退格链路删已上屏（删除会话差值记账，
+                        // onSweepEnd 结算后右滑恢复走 lastClearedText 回捡）
+                        if (hasInput) onDelete() else onKeyPress("delete")
                     } else {
                         callbacks.onBackspaceSweepRestoreOne?.invoke()
                     }
