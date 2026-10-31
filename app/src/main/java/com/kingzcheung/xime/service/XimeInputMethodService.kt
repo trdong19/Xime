@@ -3193,6 +3193,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return
         }
         if (deleteSessionActive) return
+        // 组合态（编码未上屏）的删除不入文本撤销槽：被删的是拼音编码而非文字，
+        // 下滑撤回回插字母串会出现"撤回的不是输入的字"；组合态的恢复走滑动右滑
+        //（编码放回引擎，见 onBackspaceSweepDeleteStep/onBackspaceSweepRestoreOne）。
+        if (candidateState.value.isComposing || candidateState.value.inputText.isNotEmpty()) return
         val before = readTextBeforeCursorWindowed() ?: return
         deleteSessionActive = true
         deleteSessionBeforeText = before
@@ -3248,8 +3252,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             keyboardCallbacks?.onKeyPress("delete", false)
             return
         }
-        // 空闲态：确保删除会话已开账（手势可能未经过单击路径）
-        if (!deleteSessionActive) beginDeleteSession()
+        // 空闲态：滑动恢复栈独立记账（不依赖下滑撤回的会话；组合态已在 begin 处排除）
         val before = readTextBeforeCursorWindowed()
         // 按码点取最后一个字符（emoji 等代理对整体删除，避免删半个字符）
         if (before.isNullOrEmpty()) return
