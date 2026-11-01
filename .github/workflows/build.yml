@@ -141,6 +141,6 @@ jobs:
         with:
           name: release-apks
           path: |
-            app/build/outputs/apk/release/*arm64-v8a*.apk
+            app/build/outputs/apk/release/*.apk
             build/plugin-release/tone-comment-*.xipk
           retention-days: 7
