@@ -1265,8 +1265,6 @@ fun SwipeableIconKeyButton(
      */
     onSweepStep: ((Int) -> Unit)? = null,
     onSweepEnd: (() -> Unit)? = null,
-    onSweepStep: ((Int) -> Unit)? = null,
-    onSweepEnd: (() -> Unit)? = null,
     /** 滑动模式激活回调（首次跨过接管阈值）：结算既有删除会话并开启滑动新账 */
     onSweepActivate: (() -> Unit)? = null,
     sweepStepDp: Float = 10f,
