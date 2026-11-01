@@ -51,7 +51,7 @@ android {
         applicationId = "com.kingzcheung.xime"
         minSdk = 28
         targetSdk = 35
-        versionCode = 20261028
+        versionCode = 20261101
         versionName = "3.4.2"
 
 
@@ -109,9 +109,12 @@ android {
                 "proguard-rules.pro"
             )
             // 只在本地有 keystore.properties 时才使用签名配置
-            // GitHub Actions 使用自己的签名方式
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                // 个人 CI 构建（无官方签名）回退 debug 签名——配合 workflow 的 keystore
+                // 缓存（xime-debug-keystore-v1），跨构建签名一致，覆盖安装不丢数据
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }
