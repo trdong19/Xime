@@ -23,6 +23,21 @@ jobs:
           submodules: recursive
           fetch-depth: 0
         
+      - name: 固定调试签名密钥（跨构建一致，覆盖安装不丢数据）
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: xime-debug-keystore-v1
+
+      - name: 生成调试密钥（cache 未命中时）
+        run: |
+          if [ ! -f ~/.android/debug.keystore ]; then
+            mkdir -p ~/.android
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore -alias androiddebugkey \
+              -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Xime Debug, OU=Xime, O=Xime, L=Beijing, ST=Beijing, C=CN"
+          fi
+
       - name: Set up JDK 17
         uses: actions/setup-java@v6
         with:
@@ -115,17 +130,17 @@ jobs:
           path: app/build/test-results/testDebugUnitTest/
           retention-days: 7
           
-      - name: Build Debug APKs
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build Release APKs（debug 签名，体积约减半）
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Build Plugin XIPKs
         run: bash scripts/build-plugins.sh
 
-      - name: Upload Debug APKs
+      - name: Upload APKs
         uses: actions/upload-artifact@v7
         with:
-          name: debug-apks
+          name: release-apks
           path: |
-            app/build/outputs/apk/debug/*.apk
-            build/plugin-release/*.xipk
+            app/build/outputs/apk/release/*arm64-v8a*.apk
+            build/plugin-release/tone-comment-*.xipk
           retention-days: 7
