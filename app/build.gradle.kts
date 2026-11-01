@@ -68,6 +68,17 @@ android {
     }
 
     signingConfigs {
+        // 个人 CI 构建：固定签名（仓库内 keystore，跨构建一致 → 覆盖安装不丢数据）
+        getByName("debug") {
+            val ks = rootProject.file("debug.keystore")
+            if (ks.exists()) {
+                storeFile = ks
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+                storeType = "PKCS12"
+            }
+        }
         create("release") {
             if (keystorePropertiesFile.exists()) {
                 // 优先使用 storeFile（已存在的 keystore 文件）；否则解码 keyBase64。
