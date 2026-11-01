@@ -347,6 +347,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * [lastClearedText] 尾字符（逐字回捡上一个删除会话删掉的内容）。
      */
     private val sweepRemovedChars = ArrayDeque<String>()
+    /** 多级恢复历史：每次删除会话/清空的内容按时间序入栈——右滑恢复逐段逐字回捡 */
+    private val sweepHistory = ArrayDeque<String>()
     /** 退格滑动（组合态）删除会话开始时的编码快照：右滑恢复时用它计算被删的字母串。null=无待恢复。 */
     private var sweepCodeBefore: String? = null
     /**
@@ -3249,7 +3251,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         //（编码放回引擎），不走文本撤销槽。
         val removed = DeleteUndo.removedPrefix(deleteSessionBeforeText, after)
         if (removed.isEmpty()) return
-        lastClearedText = removed
+        recordCleared(removed)
         lastUndoAnchorText = after
     }
 
@@ -3322,9 +3324,21 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             commitTextSilently(ch)
             return
         }
-        // 栈空：逐字回捡上一个删除会话的内容（lastClearedText 是正序差值——
-        // 从头取字符、回插后光标累积向右，恢复顺序与原文一致；
-        // 之前的"从尾取"会配出倒序，即用户看到的字序颠倒）
+        // 栈空：回捡多级历史栈（正序差值——从头取字符、回插后光标累积向右，
+        // 恢复顺序与原文一致；段消费完自动弹段继续更早的会话）
+        while (sweepHistory.isNotEmpty()) {
+            val seg = sweepHistory.lastOrNull() ?: break
+            if (seg.isEmpty()) { sweepHistory.removeLastOrNull(); continue }
+            val probe = readTextBeforeCursorWindowed()
+            if (!DeleteUndo.anchorMatches(lastUndoAnchorText, probe)) return
+            val end = seg.offsetByCodePoints(0, 1)
+            val ch2 = seg.substring(0, end)
+            commitTextSilently(ch2)
+            sweepHistory[sweepHistory.size - 1] = seg.substring(end)
+            lastUndoAnchorText = readTextBeforeCursorWindowed() ?: (probe + ch2)
+            return
+        }
+        // 历史也空：lastClearedText 兼容（旧路径直写场景）——同样头字符正序回捡
         val cleared = lastClearedText
         if (cleared.isEmpty()) return
         val probe = readTextBeforeCursorWindowed()
@@ -3333,7 +3347,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val ch2 = cleared.substring(0, end)
         commitTextSilently(ch2)
         lastClearedText = cleared.substring(end)
-        // 锚随恢复推进，否则第二个字起被锚校验拦截、剩余内容被撤销通道丢弃
         lastUndoAnchorText = readTextBeforeCursorWindowed() ?: (probe + ch2)
     }
 
@@ -3355,6 +3368,20 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         finishDeleteSession()
         beginDeleteSession()
+    }
+
+    /**
+     * 记录被删/被清内容（多级恢复历史入栈 + lastClearedText 兼容下滑撤回）。
+     * 组合态（编码未上屏）排除：被删的是拼音编码非文字，恢复走滑动右滑。
+     */
+    internal fun recordCleared(text: String) {
+        if (text.isEmpty()) return
+        val cs = candidateState.value
+        if (cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
+            cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
+        ) return
+        sweepHistory.addLast(text)
+        lastClearedText = text
     }
 
     internal fun onBackspaceSweepFinish() {
