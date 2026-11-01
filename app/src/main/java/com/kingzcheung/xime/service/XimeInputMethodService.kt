@@ -3101,6 +3101,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     private fun commitTextAndPredict(text: String, isPaste: Boolean) {
+        // 新文字上屏 = 撤销历史终结（标准 undo 语义）：清空滑动删除/恢复的所有记录，
+        // 防止很久以前删除的内容被右滑恢复插进新文字中间
+        sweepHistory.clear()
+        sweepRemovedChars.clear()
+        lastClearedText = ""
+        lastUndoAnchorText = null
         commitTextSilently(text, isPaste)
         if (isChineseMode) {
             mainHandler.post {
