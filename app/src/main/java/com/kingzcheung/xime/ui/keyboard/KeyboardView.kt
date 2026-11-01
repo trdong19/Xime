@@ -848,8 +848,9 @@ fun KeyboardView(
                         val cursorMod = if (callbacks.onCursorMove != null) {
                             Modifier.pointerInput(Unit) {
                                 val stepThresholdPx = 25.dp.toPx()
+                                val fastStepPx = 10.dp.toPx()
                                 val activationThresholdPx = 60.dp.toPx()
-                                val jumpThresholdPx = 40.dp.toPx()
+                                val jumpThresholdPx = 25.dp.toPx()
                                 awaitEachGesture {
                                     suppressCursorMove.value = false
                                     cursorGestureActive.value = false
@@ -888,24 +889,22 @@ fun KeyboardView(
                                                 if (isCursorGesture) {
                                                     event.changes.forEach { it.consume() }
                                                     val dxFromAnchor = change.position.x - activationAnchorX
-                                                    val steps = (dxFromAnchor / stepThresholdPx).toInt()
+                                                    val now = android.os.SystemClock.uptimeMillis()
+                                                    val interval = if (lastStepTime == 0L) 1000L else now - lastStepTime
+                                                    lastStepTime = now
+                                                    // 逐字移动 + 速度加快：连续快速滑动时步进阈值自动
+                                                    // 缩短（25dp→10dp），同样距离逐字触发更多步
+                                                    val curStepPx = if (lastStepTime != 0L && interval < 250) fastStepPx else stepThresholdPx
+                                                    val steps = (dxFromAnchor / curStepPx).toInt()
                                                     if (steps != lastSteps) {
-                                                        val now = android.os.SystemClock.uptimeMillis()
-                                                        val interval = if (lastStepTime == 0L) 1000L else now - lastStepTime
-                                                        lastStepTime = now
-                                                        // 速度加速：连续快速滑动时步长倍增（慢滑逐字精调、快滑大步跳）
-                                                        val magnitude = when {
-                                                            interval < 120 -> 4
-                                                            interval < 250 -> 2
-                                                            else -> 1
-                                                        }
-                                                        val delta = (steps - lastSteps) * magnitude
+                                                        // 每事件至多移动 1 字（逐字），快滑时事件密集自然加速
+                                                        val delta = if (steps > lastSteps) 1 else -1
                                                         currentOnCursorMove.value?.invoke(delta)
                                                         lastSteps = steps
                                                     }
-                                                    // 行首/行尾跳转：横滑激活后上滑累计 ≥ 40dp →
+                                                    // 行首/行尾跳转：横滑激活后下滑累计 ≥ 25dp →
                                                     // 按滑动方向跳（左滑方向→行头、右滑方向→行尾），手势结束
-                                                    if (dy < -jumpThresholdPx && steps != lastJumpSteps) {
+                                                    if (dy > jumpThresholdPx && steps != lastJumpSteps) {
                                                         lastJumpSteps = steps
                                                         edgeHandler?.let { viewHandler.removeCallbacks(it) }
                                                         edgeHandler = null
@@ -925,9 +924,9 @@ fun KeyboardView(
                                                         val dirLocal = edgeDir
                                                         val runnable = object : Runnable {
                                                             override fun run() {
-                                                                currentOnCursorMove.value?.invoke(dirLocal * chars)
-                                                                chars = (chars * 2).coerceAtMost(8)
-                                                                delayMs = (delayMs * 0.7f).toLong().coerceAtLeast(60L)
+                                                                // 逐字移动，速度加快=触发频率递增（50ms 封顶）
+                                                                currentOnCursorMove.value?.invoke(dirLocal)
+                                                                delayMs = (delayMs * 0.6f).toLong().coerceAtLeast(50L)
                                                                 viewHandler.postDelayed(this, delayMs)
                                                             }
                                                         }

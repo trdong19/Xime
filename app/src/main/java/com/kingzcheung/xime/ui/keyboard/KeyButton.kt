@@ -1265,9 +1265,13 @@ fun SwipeableIconKeyButton(
      */
     onSweepStep: ((Int) -> Unit)? = null,
     onSweepEnd: (() -> Unit)? = null,
+    onSweepStep: ((Int) -> Unit)? = null,
+    onSweepEnd: (() -> Unit)? = null,
     /** 滑动模式激活回调（首次跨过接管阈值）：结算既有删除会话并开启滑动新账 */
     onSweepActivate: (() -> Unit)? = null,
     sweepStepDp: Float = 10f,
+    /** 滑动删除总开关（组合态传 false：保持一次性左右滑原行为） */
+    sweepEnabled: Boolean = true,
     /**
      * 长按是否连发（每 30ms 重复）。删除键为 true（长按连删）；
      * 普通功能键传 false（长按只触发一次，避免重复打开面板/切换状态）。
@@ -1552,7 +1556,7 @@ fun SwipeableIconKeyButton(
                         // 激活即停长按连删（位移控制取代时间连发），并抑制一次性左右滑
                         val onSweepStepAction = currentOnSweepStep
                         if (onSweepStepAction != null) {
-                            if (!sweepMode && abs(dragOffsetX) > horizontalSwipeSuppressThreshold &&
+                            if (sweepEnabled && !sweepMode && abs(dragOffsetX) > horizontalSwipeSuppressThreshold &&
                                 abs(dragOffsetX) > abs(dragOffsetY)
                             ) {
                                 sweepMode = true

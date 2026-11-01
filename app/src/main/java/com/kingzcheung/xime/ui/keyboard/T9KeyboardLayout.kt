@@ -309,6 +309,7 @@ private fun T9KeyboardSwipeOverlay(
                         onSwipeStateChange = ::processSwipeState,
                         onDelete = onDelete,
                         compactMode = true,
+                        sweepEnabled = !candidateState.value.hasInput(),
                         candidateState = candidateState,
                         onGestureAction = onGestureAction,
                     )
@@ -343,6 +344,7 @@ private fun T9KeyboardSwipeOverlay(
                         onSwipeStateChange = ::processSwipeState,
                         onDelete = onDelete,
                         compactMode = false,
+                        sweepEnabled = !candidateState.value.hasInput(),
                         candidateState = candidateState,
                         onGestureAction = onGestureAction,
                     )
@@ -373,6 +375,10 @@ private fun T9KeyboardContent(
     onSwipeStateChange: ((SwipeState, Rect) -> Unit)?,
     onDelete: () -> Unit,
     compactMode: Boolean = false,
+    /** 滑动删除总开关（组合态传 false：保持一次性左右滑原行为） */
+    sweepEnabled: Boolean = true,
+    /** 滑动删除总开关（组合态传 false：保持一次性左右滑原行为） */
+    sweepEnabled: Boolean = true,
     candidateState: State<CandidateState> = remember { mutableStateOf(CandidateState()) },
     onGestureAction: ((GestureAction, String) -> Unit)? = null,
 ) {
@@ -779,6 +785,7 @@ private fun T9KeyboardContent(
                     }
                 },
                 onSweepEnd = { callbacks.onBackspaceSweepFinish?.invoke() },
+                sweepEnabled = sweepEnabled,
                 onSwipeStateChange = { state, bounds ->
                     onSwipeStateChange?.invoke(state, bounds)
                 },

@@ -37,4 +37,8 @@ data class CandidateState(
      *  展开页（CandidatePage）渲染时按文本回填显示注释；右选定位仍用引擎原
      *  注释（t9EngineComments / expandedCandidates），见 ImeKeyRouter。 */
     val t9CommentOverrides: Map<String, String> = emptyMap(),
-)
+) {
+    /** 组合态判定（与 ImeKeyRouter.hasInputState 同口径，滑动删除/恢复的启用开关用） */
+    fun hasInput(): Boolean = isComposing || inputText.isNotEmpty() || preeditText.isNotEmpty() ||
+        pendingEnglishText.isNotEmpty()
+}

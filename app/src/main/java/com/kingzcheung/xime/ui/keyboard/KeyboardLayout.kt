@@ -141,6 +141,8 @@ fun KeyboardLayout(
     onKeyPress: (String) -> Unit,
     viewModel: KeyboardViewModel,
     callbacks: KeyboardCallbacks,
+    /** 滑动删除总开关（组合态传 false） */
+    sweepEnabled: Boolean = true,
     uiState: KeyboardUiState,
     isAsciiMode: Boolean,
     modifier: Modifier = Modifier,
@@ -328,6 +330,7 @@ fun KeyboardLayout(
                         onBackspaceSweepRestoreOne = callbacks.onBackspaceSweepRestoreOne,
                         onBackspaceSweepFinish = callbacks.onBackspaceSweepFinish,
             onBackspaceSweepActivate = callbacks.onBackspaceSweepActivate,
+            sweepEnabled = sweepEnabled,
                         onKeyRelease = onKeyRelease,
                         onCommitText = onCommitText,
                         onGestureAction = onGestureAction,
@@ -621,6 +624,8 @@ internal class QwertyRowEnv(
     val onBackspaceSweepRestoreOne: (() -> Unit)? = null,
     val onBackspaceSweepFinish: (() -> Unit)? = null,
     val onBackspaceSweepActivate: (() -> Unit)? = null,
+    /** 滑动删除总开关（组合态传 false：保持一次性左右滑原行为） */
+    val sweepEnabled: Boolean = true,
 )
 
 /** 功能键列宽：显式 `keys.<id>.width` 优先，否则内置默认。 */
@@ -2089,6 +2094,7 @@ private fun LandscapeKeyboardContent(
         onBackspaceSweepRestoreOne = callbacks.onBackspaceSweepRestoreOne,
         onBackspaceSweepFinish = callbacks.onBackspaceSweepFinish,
             onBackspaceSweepActivate = callbacks.onBackspaceSweepActivate,
+            sweepEnabled = sweepEnabled,
         onKeyRelease = onKeyRelease,
         onCommitText = onCommitText,
         onGestureAction = onGestureAction,
