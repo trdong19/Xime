@@ -15,6 +15,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # 内置插件（debug 构建从 assets 自动安装的集合）
 BUNDLED_PLUGINS="ai-reply ai-translate ai-write webdav-clipboard-sync"
 
+# 弃用插件（不打包不分发）：tone-comment 九键声调已内置宿主（PinyinTone）
+DEPRECATED_PLUGINS=" tone-comment "
+
 WITH_ASSETS=0
 CLI_ARGS=()
 for arg in "$@"; do
@@ -28,11 +31,18 @@ done
 echo "=== 构建 TS 插件 xipk 包（xipm CLI）==="
 
 cd "$PROJECT_DIR/tools/xime-plugin"
-cargo run --quiet -- pack --all \
-  --plugins-dir "$PROJECT_DIR/plugins" \
-  --out "$PROJECT_DIR/build/plugin-js" \
-  --release-dir "$PROJECT_DIR/build/plugin-release" \
-  "${CLI_ARGS[@]+"${CLI_ARGS[@]}"}"
+for d in "$PROJECT_DIR"/plugins/*/; do
+  name=$(basename "$d")
+  [ -f "$d/manifest.json" ] || { echo "⊘ 跳过 $name（无 manifest.json）"; continue; }
+  if [[ "$DEPRECATED_PLUGINS" == *" $name "* ]]; then
+    echo "⊘ 跳过 $name（已弃用，不打包）"
+    continue
+  fi
+  cargo run --quiet -- pack "$d" \
+    --out "$PROJECT_DIR/build/plugin-js" \
+    --release-dir "$PROJECT_DIR/build/plugin-release" \
+    "${CLI_ARGS[@]+"${CLI_ARGS[@]}"}"
+done
 
 if [ "$WITH_ASSETS" = "1" ]; then
   ASSETS_DIR="$PROJECT_DIR/app/src/main/assets/plugins"
