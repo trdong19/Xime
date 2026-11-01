@@ -3322,15 +3322,17 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             commitTextSilently(ch)
             return
         }
-        // 栈空：逐字回捡上一个删除会话的内容（lastClearedText 尾字符）
+        // 栈空：逐字回捡上一个删除会话的内容（lastClearedText 是正序差值——
+        // 从头取字符、回插后光标累积向右，恢复顺序与原文一致；
+        // 之前的"从尾取"会配出倒序，即用户看到的字序颠倒）
         val cleared = lastClearedText
         if (cleared.isEmpty()) return
         val probe = readTextBeforeCursorWindowed()
         if (!DeleteUndo.anchorMatches(lastUndoAnchorText, probe)) return
-        val start = cleared.offsetByCodePoints(cleared.length, -1)
-        val ch2 = cleared.substring(start)
+        val end = cleared.offsetByCodePoints(0, 1)
+        val ch2 = cleared.substring(0, end)
         commitTextSilently(ch2)
-        lastClearedText = cleared.substring(0, cleared.length - ch2.length)
+        lastClearedText = cleared.substring(end)
         // 锚随恢复推进，否则第二个字起被锚校验拦截、剩余内容被撤销通道丢弃
         lastUndoAnchorText = readTextBeforeCursorWindowed() ?: (probe + ch2)
     }
