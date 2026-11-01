@@ -344,11 +344,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * 滑动手势（onBackspaceSweepStep）逐字删除时入栈、右滑逐字恢复时出栈；
      * 抬手结算（[onBackspaceSweepFinish]）后清空——净删除已由删除会话差值记账
      * 写入 [lastClearedText]，此后下滑撤回接管。栈空时右滑恢复转而消费
-     * [lastClearedText] 尾字符（逐字回捡上一个删除会话删掉的内容）。
+     * [lastClearedText] 头字符（逐字回捡上一个删除会话删掉的内容，消费完即止）。
      */
     private val sweepRemovedChars = ArrayDeque<String>()
-    /** 多级恢复历史：每次删除会话/清空的内容按时间序入栈——右滑恢复逐段逐字回捡 */
-    private val sweepHistory = ArrayDeque<String>()
     /** 退格滑动（组合态）删除会话开始时的编码快照：右滑恢复时用它计算被删的字母串。null=无待恢复。 */
     private var sweepCodeBefore: String? = null
     /**
@@ -3103,7 +3101,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private fun commitTextAndPredict(text: String, isPaste: Boolean) {
         // 新文字上屏 = 撤销历史终结（标准 undo 语义）：清空滑动删除/恢复的所有记录，
         // 防止很久以前删除的内容被右滑恢复插进新文字中间
-        sweepHistory.clear()
         sweepRemovedChars.clear()
         lastClearedText = ""
         lastUndoAnchorText = null
@@ -3330,21 +3327,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             commitTextSilently(ch)
             return
         }
-        // 栈空：回捡多级历史栈（正序差值——从头取字符、回插后光标累积向右，
-        // 恢复顺序与原文一致；段消费完自动弹段继续更早的会话）
-        while (sweepHistory.isNotEmpty()) {
-            val seg = sweepHistory.lastOrNull() ?: break
-            if (seg.isEmpty()) { sweepHistory.removeLastOrNull(); continue }
-            val probe = readTextBeforeCursorWindowed()
-            if (!DeleteUndo.anchorMatches(lastUndoAnchorText, probe)) return
-            val end = seg.offsetByCodePoints(0, 1)
-            val ch2 = seg.substring(0, end)
-            commitTextSilently(ch2)
-            sweepHistory[sweepHistory.size - 1] = seg.substring(end)
-            lastUndoAnchorText = readTextBeforeCursorWindowed() ?: (probe + ch2)
-            return
-        }
-        // 历史也空：lastClearedText 兼容（旧路径直写场景）——同样头字符正序回捡
+        // 栈空：逐字回捡上一个删除会话的内容（正序差值——从头取字符、回插后光标
+        // 累积向右，恢复顺序与原文一致；消费完即止，不跨删除会话回捡）
         val cleared = lastClearedText
         if (cleared.isEmpty()) return
         val probe = readTextBeforeCursorWindowed()
@@ -3377,8 +3361,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     /**
-     * 记录被删/被清内容（多级恢复历史入栈 + lastClearedText 兼容下滑撤回）。
-     * 组合态（编码未上屏）排除：被删的是拼音编码非文字，恢复走滑动右滑。
+     * 记录被删/被清内容到撤销槽 [lastClearedText]（单槽：新会话覆盖旧会话，
+     * 恢复只回捡最近一次删除/清空的内容）。组合态（编码未上屏）排除：
+     * 被删的是拼音编码非文字，恢复走滑动右滑。
      */
     internal fun recordCleared(text: String) {
         if (text.isEmpty()) return
@@ -3386,7 +3371,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (cs.isComposing || cs.inputText.isNotEmpty() || cs.preeditText.isNotEmpty() ||
             cs.pendingEnglishText.isNotEmpty() || t9PartialSegments.isNotEmpty()
         ) return
-        sweepHistory.addLast(text)
         lastClearedText = text
     }
 
