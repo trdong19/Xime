@@ -292,12 +292,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 }.getOrNull()
                                 before == pendingEnglish && ic.deleteSurroundingText(pendingEnglish.length, 0)
                             }
-                            if (removed) service.lastClearedText = pendingEnglish
+                            if (removed) service.recordCleared(pendingEnglish)
                         } else {
                             // 撤回重放用 inputText（原始键入串）：preeditText 现为带回显分隔符的
                             // 展示串（如 ni'hao），上屏必须无分隔符版本。T9 时 inputText 为合成显示态，
                             // 与 preeditText 同值，行为不变。
-                            service.lastClearedText = candState.inputText
+                            service.recordCleared(candState.inputText)
                         }
                         clearInputStateForKeys()
                     } else {
@@ -312,10 +312,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         val inputFieldText = withContext(Dispatchers.Main) {
                             service.currentInputConnection?.getTextBeforeCursor(XimeInputMethodService.SAFE_TEXT_LIMIT, 0)?.toString() ?: ""
                         }
-                        service.lastClearedText = when {
-                            codeInInputBox -> inputFieldText + candState.pendingEnglishText
-                            else -> inputFieldText + candState.inputText + candState.pendingEnglishText
-                        }
+                        service.recordCleared(
+                            when {
+                                codeInInputBox -> inputFieldText + candState.pendingEnglishText
+                                else -> inputFieldText + candState.inputText + candState.pendingEnglishText
+                            }
+                        )
                         // 清空 partial 累积，避免残留词被 buildT9DisplayState 拼进下一轮 preedit。
                         service.t9PartialSegments.clear()
                         service.rimeEngine.clearComposition()
