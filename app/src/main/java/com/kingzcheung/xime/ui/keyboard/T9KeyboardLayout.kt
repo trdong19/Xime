@@ -377,8 +377,6 @@ private fun T9KeyboardContent(
     compactMode: Boolean = false,
     /** 滑动删除总开关（组合态传 false：保持一次性左右滑原行为） */
     sweepEnabled: Boolean = true,
-    /** 滑动删除总开关（组合态传 false：保持一次性左右滑原行为） */
-    sweepEnabled: Boolean = true,
     candidateState: State<CandidateState> = remember { mutableStateOf(CandidateState()) },
     onGestureAction: ((GestureAction, String) -> Unit)? = null,
 ) {

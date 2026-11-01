@@ -291,6 +291,8 @@ fun KeyboardLayout(
                 onKeyPress = onKeyPress,
                 viewModel = viewModel,
                 callbacks = callbacks,
+
+                sweepEnabled = sweepEnabled,
                 uiState = uiState,
                 isAsciiMode = isAsciiMode,
                 keyRows = rowsLayout.rows,
@@ -2039,6 +2041,7 @@ private fun LandscapeKeyboardContent(
     onKeyPress: (String) -> Unit,
     viewModel: KeyboardViewModel,
     callbacks: KeyboardCallbacks,
+    sweepEnabled: Boolean = true,
     uiState: KeyboardUiState,
     isAsciiMode: Boolean,
     keyRows: List<KeyboardRow>,
