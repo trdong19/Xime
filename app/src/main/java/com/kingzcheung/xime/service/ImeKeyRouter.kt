@@ -213,6 +213,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     )
                     QuickSendFormEditTextHolder.editText = null
                     QuickSendFormCodeEditTextHolder.editText = null
+                    // 清残留：表单期间可能存在的拼音组合态 / 英文 pending，
+                    // 关表单后候选栏不应再显示它们
+                    service.mainHandler.post {
+                        service.rimeEngine.clearComposition()
+                        service.candidateState.value = service.candidateState.value.copy(
+                            inputText = "", preeditText = "", pendingEnglishText = "",
+                            candidates = emptyList(), candidateComments = emptyList(),
+                            associationCandidates = emptyList(), isComposing = false,
+                            candidateActions = emptyList()
+                        )
+                    }
                     service.keyboardViewModel.showOverlay(OverlayRoute.Clipboard(1))
                     return
                 }
@@ -232,6 +243,28 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         service.deleteInQuickSendForm()
                     }
                     return
+                }
+                else -> {
+                    if (key.length == 1 && service.uiState.value.isAsciiMode) {
+                        // 英文模式：字符直接插入焦点表单框（文本框/触发编码框），
+                        // 不进引擎与候选栏——否则逐字上屏进表单的同时 pendingEnglishText
+                        // 也在累积，候选栏残留英文组合，而表单删除只作用于表单输入框，
+                        // 清不掉候选栏（2026-11-02 用户实测）。
+                        // 中文模式保持穿透：拼音组合→候选→选词上屏重定向进表单（既有设计）。
+                        val char = if (isShifted) key.uppercase() else key
+                        val s = service.uiState.value
+                        val box = if (s.quickSendFormFocused && s.quickSendCodeFocused)
+                            QuickSendFormCodeEditTextHolder.editText
+                        else QuickSendFormEditTextHolder.editText
+                        box?.let { et ->
+                            val start = et.selectionStart.coerceAtLeast(0)
+                            val end = et.selectionEnd.coerceAtLeast(start)
+                            if (end > start) et.text?.replace(start, end, char)
+                            else et.text?.insert(start, char)
+                            try { et.setSelection(start + char.length) } catch (_: Exception) {}
+                        }
+                        return
+                    }
                 }
             }
         }

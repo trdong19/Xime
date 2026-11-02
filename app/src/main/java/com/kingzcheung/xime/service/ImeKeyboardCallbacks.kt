@@ -485,6 +485,16 @@ internal fun rememberImeKeyboardCallbacks(
                 )
                 QuickSendFormEditTextHolder.editText = null
                 QuickSendFormCodeEditTextHolder.editText = null
+                // 清残留：拼音组合态 / 英文 pending 不随表单遗留到候选栏
+                service.mainHandler.post {
+                    service.rimeEngine.clearComposition()
+                    service.candidateState.value = service.candidateState.value.copy(
+                        inputText = "", preeditText = "", pendingEnglishText = "",
+                        candidates = emptyList(), candidateComments = emptyList(),
+                        associationCandidates = emptyList(), isComposing = false,
+                        candidateActions = emptyList()
+                    )
+                }
                 service.keyboardViewModel.showOverlay(OverlayRoute.Clipboard(1))
                 // insets 恢复由 SideEffect 驱动：表单收起 → 容器物理高度还原 →
                 // relayout → onComputeInsets 自动重算，无需强制触发。
