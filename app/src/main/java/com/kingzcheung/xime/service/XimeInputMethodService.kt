@@ -467,7 +467,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         )
         android.util.Log.d(
             "CandidatePerf",
-            "refreshExpandedCandidates: count=${all.size} cost=${android.os.SystemClock.elapsedRealtime() - perfT0}ms"
+            "refreshExpandedCandidates: count=${builder.size} cost=${android.os.SystemClock.elapsedRealtime() - perfT0}ms"
         )
     }
 
