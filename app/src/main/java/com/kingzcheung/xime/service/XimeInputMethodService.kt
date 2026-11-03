@@ -428,6 +428,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             if (candidateState.value.expandedCandidates.isNotEmpty()) {
                 candidateState.value = candidateState.value.copy(
                     expandedCandidates = emptyList(),
+                    expandedHostCount = 0,
                     expandedActions = emptyList()
                 )
             }
@@ -436,10 +437,22 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val perfT0 = android.os.SystemClock.elapsedRealtime()
         // 纠错候选由 librime 插件（correction_translator）直接产出并参与引擎排序，
         // 展开页只需拉取引擎的跨页全量候选，不再在 Kotlin 侧合成候选。
-        val all = rimeEngine.getAllCandidates().toList()
+        val engineAll = rimeEngine.getAllCandidates().toList()
+        // 快捷发送候选注入展开页头部（编码命中，与主候选栏同源；注释=触发编码/"快捷"）：
+        // 头部条目走 expandedActions 直接上屏；引擎候选的全局索引由路由侧按
+        // expandedHostCount 平移回引擎全局索引（selectCandidateGlobal/deleteCandidateGlobal）
+        val hostMatches = quickSendNativeMatchesAnnotated(
+            codes = listOf(rimeEngine.getInput(), candidateState.value.pendingEnglishText),
+            engineCandidates = emptyList()
+        )
+        val hostCount = hostMatches.size
+        val all: List<RimeCandidate> = if (hostCount == 0) engineAll else
+            hostMatches.map { RimeCandidate(it.first, it.second) } + engineAll
         candidateState.value = candidateState.value.copy(
             expandedCandidates = all,
-            expandedActions = emptyList()
+            expandedActions = if (hostCount == 0) emptyList()
+                else hostMatches.map { CandidateAction.plugin(it.first) },
+            expandedHostCount = hostCount
         )
         android.util.Log.d(
             "CandidatePerf",

@@ -846,15 +846,21 @@ fun KeyboardView(
                         val viewHandler = android.os.Handler(android.os.Looper.getMainLooper())
                         var edgeHandler: Runnable? = null
                         var edgeDir = 0
+                        val appContext = LocalContext.current
                         val cursorMod = if (callbacks.onCursorMove != null) {
                             Modifier.pointerInput(Unit) {
-                                val stepThresholdPx = 25.dp.toPx()
-                                val fastStepPx = 10.dp.toPx()
                                 val activationThresholdPx = 60.dp.toPx()
-                                val jumpThresholdPx = 25.dp.toPx()
                                 awaitEachGesture {
                                     suppressCursorMove.value = false
                                     cursorGestureActive.value = false
+                                    // 手势参数每次手势开始时从设置读取：改动即时生效，无需重启键盘
+                                    if (!SettingsPreferences.isCursorGestureEnabled(appContext)) return@awaitEachGesture
+                                    val stepDp = SettingsPreferences.getCursorStepDp(appContext)
+                                    val stepThresholdPx = stepDp.dp.toPx()
+                                    val fastStepPx = (stepDp * 0.4f).dp.toPx()
+                                    val jumpThresholdPx = SettingsPreferences.getCursorJumpDownDp(appContext).dp.toPx()
+                                    val jumpAngleRatio = SettingsPreferences.getCursorJumpAngleRatio(appContext).toFloat()
+                                    val jumpEnabled = SettingsPreferences.isCursorJumpEnabled(appContext)
                                     val down = awaitFirstDown(requireUnconsumed = false)
                                     var isCursorGesture = false
                                     var lastSteps = 0
@@ -881,7 +887,7 @@ fun KeyboardView(
                                                 break
                                             }
                                             if (suppressCursorMove.value) break
-                                            if (abs(dx) > abs(dy) * 4f) {
+                                            if (abs(dx) > abs(dy) * jumpAngleRatio) {
 
                                                 if (!isCursorGesture && abs(dx) > activationThresholdPx) {
                                                     isCursorGesture = true
@@ -912,9 +918,9 @@ fun KeyboardView(
                                                             else (fireIntervalEma * 2 + fireInterval) / 3
                                                         }
                                                     }
-                                                    // 行首/行尾跳转：横滑激活后下滑累计 ≥ 25dp →
+                                                    // 行首/行尾跳转：横滑激活后下滑累计 ≥ 触发距离 →
                                                     // 按滑动方向跳（左滑方向→行头、右滑方向→行尾），手势结束
-                                                    if (dy > jumpThresholdPx && steps != lastJumpSteps) {
+                                                    if (jumpEnabled && dy > jumpThresholdPx && steps != lastJumpSteps) {
                                                         lastJumpSteps = steps
                                                         edgeHandler?.let { viewHandler.removeCallbacks(it) }
                                                         edgeHandler = null
@@ -1537,6 +1543,10 @@ fun KeyboardView(
                         onQuickSendAddClick = {
                             viewModel.closeOverlay()
                             callbacks.onShowQuickSendForm?.invoke()
+                        },
+                        onQuickSendCreateFromText = { text ->
+                            viewModel.closeOverlay()
+                            callbacks.onQuickSendCreateFromText?.invoke(text)
                         },
                         onQuickSendEditItem = { id, text, code ->
                             viewModel.closeOverlay()

@@ -71,6 +71,7 @@ object RimeConfigHelper {
      */
     fun ensureDeployment(context: Context): Boolean {
         synchronized(deploymentLock) {
+            val t0 = android.os.SystemClock.elapsedRealtime()
             // 刚补回基础文件：旧 hash 与产物已不可信，强制重编
             if (ensureBuiltinBaseFiles(context) > 0) SettingsPreferences.setDeploymentHash(context, "")
             val currentHash = computeDeploymentHash(context)
@@ -83,6 +84,7 @@ object RimeConfigHelper {
                 missing.isEmpty()
             ) {
                 SettingsPreferences.setDeploymentDone(context, true)
+                FileLogger.i(TAG, "ensureDeployment: skip (hash match), ${android.os.SystemClock.elapsedRealtime() - t0}ms")
                 return true
             }
             if (missing.isNotEmpty()) {
@@ -142,10 +144,13 @@ object RimeConfigHelper {
                         TAG,
                         "Deployment finished but schemas are not compiled: ${stillMissing.joinToString()}"
                     )
+                    FileLogger.i(TAG, "ensureDeployment: FAILED after ${android.os.SystemClock.elapsedRealtime() - t0}ms")
                     return false
                 }
+                FileLogger.i(TAG, "ensureDeployment: deployed in ${android.os.SystemClock.elapsedRealtime() - t0}ms")
                 return true
             }
+            FileLogger.i(TAG, "ensureDeployment: engine deploy failed, ${android.os.SystemClock.elapsedRealtime() - t0}ms")
             return false
         }
     }

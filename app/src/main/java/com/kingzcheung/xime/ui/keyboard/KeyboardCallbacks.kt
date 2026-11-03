@@ -137,6 +137,8 @@ data class KeyboardCallbacks(
     /** 退格滑动激活（结算既有删除会话 + 开滑动新账）。 */
     var onBackspaceSweepActivate: (() -> Unit)? = null,
     val onShowQuickSendForm: (() -> Unit)? = null,
+    /** 从剪贴板条目"存为常用语"：打开快捷发送表单并预填内容（新增模式，可补触发编码）。 */
+    val onQuickSendCreateFromText: ((String) -> Unit)? = null,
     /**
      * 从剪贴板面板主动拉取远端剪贴板内容（仅剪贴板同步已启用时非空）。
      * 由剪贴板面板导航头的「拉取」按钮触发。

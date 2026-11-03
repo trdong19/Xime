@@ -178,6 +178,32 @@ object BackupManager {
      * 引擎未就绪（冷启动直接进设置页）时记 pending 标记，由 IME 服务引擎就绪后补做。
      */
     private suspend fun afterRestore(context: Context, outcome: RestoreOutcome) {
+        // 快捷发送条目（含触发编码）：按文本去重后入库（换机/重装一键恢复）
+        outcome.quickSendJson?.let { data ->
+            try {
+                val dao = com.kingzcheung.xime.clipboard.db.ClipboardDatabase.getInstance(context).clipboardDao()
+                val arr = org.json.JSONArray(data.toString(Charsets.UTF_8))
+                var restored = 0
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val text = obj.optString("text")
+                    if (text.isEmpty()) continue
+                    if (dao.findQuickSendByText(text) != null) continue
+                    dao.insert(
+                        com.kingzcheung.xime.clipboard.db.ClipboardEntry(
+                            text = text,
+                            code = obj.optString("code"),
+                            isQuickSend = true,
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                    restored++
+                }
+                Log.i(TAG, "Restore: 快捷发送条目已恢复 $restored 条")
+            } catch (e: Exception) {
+                Log.w(TAG, "Restore: 快捷发送条目恢复失败", e)
+            }
+        }
         if (outcome.dictSnapshotCount > 0) {
             // 词库不直接覆盖 leveldb：快照交给 librime `UserDictManager::Restore` 按时间戳合并
             // （与词库同步同语义）：备份后本机新打的词不会被旧备份吃掉。
@@ -239,7 +265,12 @@ object BackupManager {
      * @param entryCount        落盘条目总数（0 → 视为空包失败）
      * @param dictSnapshotCount 落盘的自造词快照文件数（`sync/<id>/` 下的 `*.userdb.txt`）
      */
-    internal data class RestoreOutcome(val entryCount: Int, val dictSnapshotCount: Int)
+    internal data class RestoreOutcome(
+        val entryCount: Int,
+        val dictSnapshotCount: Int,
+        /** 包内 `_xime_backup/quicksend.json` 原文（快捷发送条目，含触发编码）；无则 null。 */
+        val quickSendJson: ByteArray? = null
+    )
 
     /**
      * 恢复核心（纯 JVM，便于单测）：META 条目按前缀路由，其余条目进 filesDir/rime。
@@ -284,6 +315,7 @@ object BackupManager {
             var entryCount = 0
             var dictSnapshotCount = 0
             var skippedUserDbEntries = 0
+            var quickSendData: ByteArray? = null
             ZipInputStream(rawInput).use { zis ->
                 while (true) {
                     val entry = zis.nextEntry ?: break
@@ -294,6 +326,9 @@ object BackupManager {
                         val data = zis.readBytes()
                         when {
                             rel == "settings.json" -> prefsRestorer(PREFS_NAME_SETTINGS, data)
+                            // 快捷发送条目（含触发编码）：落 RestoreOutcome，由 afterRestore
+                            // 在有 Context 的线程上入库（避免本纯 JVM 函数依赖 Room）
+                            rel == "quicksend.json" -> quickSendData = data
                             rel.startsWith("plugin_configs/") && rel.endsWith(".json") -> {
                                 val pluginId = rel.removePrefix("plugin_configs/").removeSuffix(".json")
                                 if (isSafeId(pluginId)) {
@@ -350,7 +385,7 @@ object BackupManager {
             if (skippedUserDbEntries > 0) {
                 Log.i(TAG, "Restore: 跳过包内 leveldb 用户词典 $skippedUserDbEntries 个条目（词库走快照合并）")
             }
-            return Result.success(RestoreOutcome(entryCount, dictSnapshotCount))
+            return Result.success(RestoreOutcome(entryCount, dictSnapshotCount, quickSendData))
         } catch (e: Exception) {
             return Result.failure(e)
         }
@@ -439,6 +474,21 @@ object BackupManager {
         val entries = mutableListOf<Pair<String, ByteArray>>()
         val settingsPrefs = context.getSharedPreferences(PREFS_NAME_SETTINGS, Context.MODE_PRIVATE)
         entries += (META_PREFIX + "settings.json") to prefsToJson(settingsPrefs).toByteArray(Charsets.UTF_8)
+
+        // 快捷发送条目（isQuickSend=1 的剪贴板库行，含触发编码）随包备份
+        runCatching {
+            val rows = kotlinx.coroutines.runBlocking {
+                com.kingzcheung.xime.clipboard.db.ClipboardDatabase.getInstance(context)
+                    .clipboardDao().quickSendSnapshot()
+            }
+            if (rows.isNotEmpty()) {
+                val arr = org.json.JSONArray()
+                rows.forEach { row ->
+                    arr.put(org.json.JSONObject().put("text", row.text).put("code", row.code))
+                }
+                entries += (META_PREFIX + "quicksend.json") to arr.toString().toByteArray(Charsets.UTF_8)
+            }
+        }.onFailure { Log.w(TAG, "collect quicksend for backup failed", it) }
 
         val sharedPrefsDir = File(context.filesDir.parentFile, "shared_prefs")
         sharedPrefsDir.listFiles()

@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import com.kingzcheung.xime.keyboard.GestureAction
 import com.kingzcheung.xime.settings.DisplayMode
 import com.kingzcheung.xime.settings.KeysConfigHelper
+import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.settings.swipeHandlerFor
 import com.kingzcheung.xime.ui.isTablet
 import androidx.compose.ui.Alignment
@@ -783,7 +784,8 @@ private fun T9KeyboardContent(
                     }
                 },
                 onSweepEnd = { callbacks.onBackspaceSweepFinish?.invoke() },
-                sweepEnabled = sweepEnabled,
+                sweepEnabled = sweepEnabled && SettingsPreferences.isBackspaceSweepEnabled(LocalContext.current),
+                sweepStepDp = SettingsPreferences.getBackspaceSweepStepDp(LocalContext.current).toFloat(),
                 onSwipeStateChange = { state, bounds ->
                     onSwipeStateChange?.invoke(state, bounds)
                 },

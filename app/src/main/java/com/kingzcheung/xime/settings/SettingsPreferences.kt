@@ -35,6 +35,19 @@ object SettingsPreferences {
     private const val KEY_VIBRATION_ENABLED = "vibration_enabled"
     private const val KEY_VIBRATION_INTENSITY = "vibration_intensity"
     private const val KEY_KEYBOARD_THEME = "keyboard_theme"
+
+    // ── 手势设置（光标手势 / 下滑跳转 / 退格滑动）──
+    private const val KEY_CURSOR_GESTURE_ENABLED = "cursor_gesture_enabled"
+    /** 光标逐字步进距离（dp）：越小同距离移字越多=越快 */
+    private const val KEY_CURSOR_STEP_DP = "cursor_step_dp"
+    private const val KEY_CURSOR_JUMP_ENABLED = "cursor_jump_enabled"
+    /** 下滑跳行首/行尾的触发距离（dp） */
+    private const val KEY_CURSOR_JUMP_DOWN_DP = "cursor_jump_down_dp"
+    /** 下滑角度门限：横向位移需达到纵向位移的倍数，越大越严格防误触（默认 4 ≈ 14°） */
+    private const val KEY_CURSOR_JUMP_ANGLE_RATIO = "cursor_jump_angle_ratio"
+    private const val KEY_BACKSPACE_SWEEP_ENABLED = "backspace_sweep_enabled"
+    /** 退格滑动每步删除距离（dp）：越小越快 */
+    private const val KEY_BACKSPACE_SWEEP_STEP_DP = "backspace_sweep_step_dp"
     
     const val KEY_SMART_PREDICTION_ENABLED = "smart_prediction_enabled"
     private const val KEY_PREDICTION_MODEL_REPO = "prediction_model_repo"
@@ -72,6 +85,69 @@ object SettingsPreferences {
 
     fun getModeChangeTargetIsNumber(context: Context): Boolean {
         return getPrefs(context).getBoolean(KEY_MODE_CHANGE_TARGET, false)
+    }
+
+    // ── 手势设置读写 ──
+
+    fun isCursorGestureEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_CURSOR_GESTURE_ENABLED, true)
+
+    fun setCursorGestureEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_CURSOR_GESTURE_ENABLED, enabled).apply()
+    }
+
+    fun getCursorStepDp(context: Context): Int = getPrefs(context).getInt(KEY_CURSOR_STEP_DP, 25)
+
+    fun setCursorStepDp(context: Context, dp: Int) {
+        getPrefs(context).edit().putInt(KEY_CURSOR_STEP_DP, dp.coerceIn(10, 40)).apply()
+    }
+
+    fun isCursorJumpEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_CURSOR_JUMP_ENABLED, true)
+
+    fun setCursorJumpEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_CURSOR_JUMP_ENABLED, enabled).apply()
+    }
+
+    fun getCursorJumpDownDp(context: Context): Int =
+        getPrefs(context).getInt(KEY_CURSOR_JUMP_DOWN_DP, 25)
+
+    fun setCursorJumpDownDp(context: Context, dp: Int) {
+        getPrefs(context).edit().putInt(KEY_CURSOR_JUMP_DOWN_DP, dp.coerceIn(10, 60)).apply()
+    }
+
+    fun getCursorJumpAngleRatio(context: Context): Int =
+        getPrefs(context).getInt(KEY_CURSOR_JUMP_ANGLE_RATIO, 4)
+
+    fun setCursorJumpAngleRatio(context: Context, ratio: Int) {
+        getPrefs(context).edit().putInt(KEY_CURSOR_JUMP_ANGLE_RATIO, ratio.coerceIn(2, 8)).apply()
+    }
+
+    fun isBackspaceSweepEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_BACKSPACE_SWEEP_ENABLED, true)
+
+    fun setBackspaceSweepEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_BACKSPACE_SWEEP_ENABLED, enabled).apply()
+    }
+
+    fun getBackspaceSweepStepDp(context: Context): Int =
+        getPrefs(context).getInt(KEY_BACKSPACE_SWEEP_STEP_DP, 10)
+
+    fun setBackspaceSweepStepDp(context: Context, dp: Int) {
+        getPrefs(context).edit().putInt(KEY_BACKSPACE_SWEEP_STEP_DP, dp.coerceIn(5, 30)).apply()
+    }
+
+    /** 恢复全部手势设置为默认值 */
+    fun resetGestureDefaults(context: Context) {
+        getPrefs(context).edit()
+            .putBoolean(KEY_CURSOR_GESTURE_ENABLED, true)
+            .putInt(KEY_CURSOR_STEP_DP, 25)
+            .putBoolean(KEY_CURSOR_JUMP_ENABLED, true)
+            .putInt(KEY_CURSOR_JUMP_DOWN_DP, 25)
+            .putInt(KEY_CURSOR_JUMP_ANGLE_RATIO, 4)
+            .putBoolean(KEY_BACKSPACE_SWEEP_ENABLED, true)
+            .putInt(KEY_BACKSPACE_SWEEP_STEP_DP, 10)
+            .apply()
     }
 
     fun setModeChangeTargetIsNumber(context: Context, isNumber: Boolean) {

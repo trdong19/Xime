@@ -89,6 +89,8 @@ fun ClipboardView(
     modifier: Modifier = Modifier,
     onQuickSendAddClick: (() -> Unit)? = null,
     onQuickSendEditItem: ((Long, String, String) -> Unit)? = null,
+    /** 剪贴板条目"存为常用语"：打开快捷发送表单并预填内容。 */
+    onQuickSendCreateFromText: ((String) -> Unit)? = null,
     onPullRemote: (() -> Unit)? = null,
     pullRemoteAvailable: Boolean = false,
     /** 图片条目点选（直插/回写由服务层处理）。 */
@@ -428,6 +430,13 @@ fun ClipboardView(
                             label = tr(R.string.s_kuaijie),
                             onClick = {
                                 viewModel.addToQuickSend(anchor.item.id)
+                            }
+                        ),
+                        LongPressMenuEntry(
+                            icon = Icons.Default.Edit,
+                            label = tr(R.string.s_cunweichangyongyu),
+                            onClick = {
+                                onQuickSendCreateFromText?.invoke(anchor.item.text)
                             }
                         ),
                         LongPressMenuEntry(

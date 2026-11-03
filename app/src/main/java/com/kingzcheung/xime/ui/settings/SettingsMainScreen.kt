@@ -36,10 +36,14 @@ import androidx.compose.material.icons.twotone.Info
 import androidx.compose.material.icons.twotone.Keyboard
 import androidx.compose.material.icons.twotone.KeyboardAlt
 import androidx.compose.material.icons.twotone.Palette
+import androidx.compose.material.icons.twotone.Restore
+import androidx.compose.material.icons.twotone.Speed
 import androidx.compose.material.icons.twotone.Storefront
 import androidx.compose.material.icons.twotone.Straighten
+import androidx.compose.material.icons.twotone.SwapHoriz
 import androidx.compose.material.icons.twotone.TableChart
 import androidx.compose.material.icons.twotone.ToggleOn
+import androidx.compose.material.icons.twotone.TouchApp
 import androidx.compose.material.icons.twotone.TypeSpecimen
 import androidx.compose.material.icons.twotone.Vibration
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -251,6 +255,224 @@ fun SettingsMainContent(
                         onClick = onNavigateToLayoutDisplay,
                         showArrow = true
                     )
+                })
+            }
+
+            item {
+                SettingsSection(title = tr(R.string.s_shoushi), content = {
+                    var cursorEnabled by remember { mutableStateOf(SettingsPreferences.isCursorGestureEnabled(context)) }
+                    var cursorStepDp by remember { mutableStateOf(SettingsPreferences.getCursorStepDp(context)) }
+                    var jumpEnabled by remember { mutableStateOf(SettingsPreferences.isCursorJumpEnabled(context)) }
+                    var jumpDownDp by remember { mutableStateOf(SettingsPreferences.getCursorJumpDownDp(context)) }
+                    var jumpAngle by remember { mutableStateOf(SettingsPreferences.getCursorJumpAngleRatio(context)) }
+                    var sweepEnabled by remember { mutableStateOf(SettingsPreferences.isBackspaceSweepEnabled(context)) }
+                    var sweepStepDp by remember { mutableStateOf(SettingsPreferences.getBackspaceSweepStepDp(context)) }
+                    var speedDialog by remember { mutableStateOf(false) }
+                    var jumpDistDialog by remember { mutableStateOf(false) }
+                    var jumpAngleDialog by remember { mutableStateOf(false) }
+                    var sweepSpeedDialog by remember { mutableStateOf(false) }
+                    val reloadGestures = {
+                        cursorEnabled = SettingsPreferences.isCursorGestureEnabled(context)
+                        cursorStepDp = SettingsPreferences.getCursorStepDp(context)
+                        jumpEnabled = SettingsPreferences.isCursorJumpEnabled(context)
+                        jumpDownDp = SettingsPreferences.getCursorJumpDownDp(context)
+                        jumpAngle = SettingsPreferences.getCursorJumpAngleRatio(context)
+                        sweepEnabled = SettingsPreferences.isBackspaceSweepEnabled(context)
+                        sweepStepDp = SettingsPreferences.getBackspaceSweepStepDp(context)
+                        Unit
+                    }
+                    SettingsToggleItem(
+                        icon = Icons.TwoTone.TouchApp,
+                        title = tr(R.string.s_guangbiaoshoushi),
+                        subtitle = tr(R.string.s_guangbiaoshoushi_f),
+                        checked = cursorEnabled,
+                        onCheckedChange = {
+                            cursorEnabled = it
+                            SettingsPreferences.setCursorGestureEnabled(context, it)
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsItem(
+                        icon = Icons.TwoTone.Speed,
+                        title = tr(R.string.s_guangbiaosudu),
+                        subtitle = when (cursorStepDp) {
+                            30 -> "慢（30dp/字）"
+                            25 -> "标准（25dp/字）"
+                            18 -> "快（18dp/字）"
+                            12 -> "很快（12dp/字）"
+                            else -> "$cursorStepDp dp/字"
+                        },
+                        onClick = { speedDialog = true }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsToggleItem(
+                        icon = Icons.TwoTone.Straighten,
+                        title = tr(R.string.s_xiahuatiaozhuan),
+                        subtitle = tr(R.string.s_xiahuatiaozhuan_f),
+                        checked = jumpEnabled,
+                        onCheckedChange = {
+                            jumpEnabled = it
+                            SettingsPreferences.setCursorJumpEnabled(context, it)
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsItem(
+                        icon = Icons.TwoTone.Straighten,
+                        title = tr(R.string.s_xiahuajuli),
+                        subtitle = when (jumpDownDp) {
+                            15 -> "灵敏（15dp）"
+                            25 -> "标准（25dp）"
+                            35 -> "稳重（35dp）"
+                            50 -> "迟钝（50dp）"
+                            else -> "$jumpDownDp dp"
+                        },
+                        onClick = { jumpDistDialog = true }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsItem(
+                        icon = Icons.TwoTone.Straighten,
+                        title = tr(R.string.s_xiahuajiaodu),
+                        subtitle = when (jumpAngle) {
+                            8 -> "严格（横向需达纵向 8 倍）"
+                            4 -> "标准（横向需达纵向 4 倍）"
+                            3 -> "宽松（横向需达纵向 3 倍）"
+                            else -> "横向需达纵向 $jumpAngle 倍"
+                        },
+                        onClick = { jumpAngleDialog = true }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsToggleItem(
+                        icon = Icons.TwoTone.SwapHoriz,
+                        title = tr(R.string.s_tuigeshuachu),
+                        subtitle = tr(R.string.s_tuigeshuachu_f),
+                        checked = sweepEnabled,
+                        onCheckedChange = {
+                            sweepEnabled = it
+                            SettingsPreferences.setBackspaceSweepEnabled(context, it)
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsItem(
+                        icon = Icons.TwoTone.Speed,
+                        title = tr(R.string.s_shanchuahua),
+                        subtitle = when (sweepStepDp) {
+                            16 -> "慢（16dp/字）"
+                            10 -> "标准（10dp/字）"
+                            7 -> "快（7dp/字）"
+                            5 -> "很快（5dp/字）"
+                            else -> "$sweepStepDp dp/字"
+                        },
+                        onClick = { sweepSpeedDialog = true }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsItem(
+                        icon = Icons.TwoTone.Restore,
+                        title = tr(R.string.s_huifushoushi),
+                        subtitle = tr(R.string.s_huifushoushi_f),
+                        onClick = {
+                            SettingsPreferences.resetGestureDefaults(context)
+                            reloadGestures()
+                        }
+                    )
+                    if (speedDialog) {
+                        SettingsSingleChoiceDialog(
+                            title = tr(R.string.s_guangbiaosudu),
+                            options = listOf(
+                                SettingsChoiceOption("30", "慢（30dp/字）"),
+                                SettingsChoiceOption("25", "标准（25dp/字）"),
+                                SettingsChoiceOption("18", "快（18dp/字）"),
+                                SettingsChoiceOption("12", "很快（12dp/字）")
+                            ),
+                            selectedId = "$cursorStepDp",
+                            onSelect = {
+                                SettingsPreferences.setCursorStepDp(context, it.toInt())
+                                cursorStepDp = SettingsPreferences.getCursorStepDp(context)
+                                speedDialog = false
+                            },
+                            onDismiss = { speedDialog = false }
+                        )
+                    }
+                    if (jumpDistDialog) {
+                        SettingsSingleChoiceDialog(
+                            title = tr(R.string.s_xiahuajuli),
+                            options = listOf(
+                                SettingsChoiceOption("15", "灵敏（15dp）"),
+                                SettingsChoiceOption("25", "标准（25dp）"),
+                                SettingsChoiceOption("35", "稳重（35dp）"),
+                                SettingsChoiceOption("50", "迟钝（50dp）")
+                            ),
+                            selectedId = "$jumpDownDp",
+                            onSelect = {
+                                SettingsPreferences.setCursorJumpDownDp(context, it.toInt())
+                                jumpDownDp = SettingsPreferences.getCursorJumpDownDp(context)
+                                jumpDistDialog = false
+                            },
+                            onDismiss = { jumpDistDialog = false }
+                        )
+                    }
+                    if (jumpAngleDialog) {
+                        SettingsSingleChoiceDialog(
+                            title = tr(R.string.s_xiahuajiaodu),
+                            options = listOf(
+                                SettingsChoiceOption("8", "严格（横向需达纵向 8 倍）"),
+                                SettingsChoiceOption("4", "标准（横向需达纵向 4 倍）"),
+                                SettingsChoiceOption("3", "宽松（横向需达纵向 3 倍）")
+                            ),
+                            selectedId = "$jumpAngle",
+                            onSelect = {
+                                SettingsPreferences.setCursorJumpAngleRatio(context, it.toInt())
+                                jumpAngle = SettingsPreferences.getCursorJumpAngleRatio(context)
+                                jumpAngleDialog = false
+                            },
+                            onDismiss = { jumpAngleDialog = false }
+                        )
+                    }
+                    if (sweepSpeedDialog) {
+                        SettingsSingleChoiceDialog(
+                            title = tr(R.string.s_shanchuahua),
+                            options = listOf(
+                                SettingsChoiceOption("16", "慢（16dp/字）"),
+                                SettingsChoiceOption("10", "标准（10dp/字）"),
+                                SettingsChoiceOption("7", "快（7dp/字）"),
+                                SettingsChoiceOption("5", "很快（5dp/字）")
+                            ),
+                            selectedId = "$sweepStepDp",
+                            onSelect = {
+                                SettingsPreferences.setBackspaceSweepStepDp(context, it.toInt())
+                                sweepStepDp = SettingsPreferences.getBackspaceSweepStepDp(context)
+                                sweepSpeedDialog = false
+                            },
+                            onDismiss = { sweepSpeedDialog = false }
+                        )
+                    }
                 })
             }
 

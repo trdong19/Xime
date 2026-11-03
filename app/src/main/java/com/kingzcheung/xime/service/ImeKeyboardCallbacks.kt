@@ -458,6 +458,22 @@ internal fun rememberImeKeyboardCallbacks(
                 // 撑高由 SideEffect 驱动：uiState 变化 → Compose 内容高度变化 →
                 // updateHeight 改容器物理高度 → relayout → onComputeInsets 自动重算。
             },
+            onQuickSendCreateFromText = { text ->
+                // 剪贴板"存为常用语"：同 onShowQuickSendForm（先退 Overlay 防遮挡），
+                // 但预填条目内容（新增模式，editingItemId=null → 确定时新增）
+                service.closeToolPanel()
+                service.keyboardViewModel.closeOverlay()
+                val current = service.uiState.value
+                service.uiState.value = current.copy(
+                    showQuickSendForm = true,
+                    quickSendFormFocused = true,
+                    quickSendCodeFocused = false,
+                    quickSendEditingItemId = null,
+                    quickSendEditingItemText = text,
+                    quickSendEditingItemCode = "",
+                    enterKeyText = tr(R.string.s_queding),
+                )
+            },
             onQuickSendEditItem = { id, text, code ->
                 // 同 onShowQuickSendForm：编辑入口在剪贴板面板内，先退出 Overlay 防表单被盖
                 service.keyboardViewModel.closeOverlay()

@@ -16,6 +16,10 @@ interface ClipboardDao {
     @Query("SELECT * FROM clipboard_entries WHERE isQuickSend = 1 ORDER BY timestamp DESC")
     fun observeQuickSend(): Flow<List<ClipboardEntry>>
 
+    /** 备份用一次性快照（observeQuickSend 的 suspend 版）。 */
+    @Query("SELECT * FROM clipboard_entries WHERE isQuickSend = 1 ORDER BY timestamp DESC")
+    suspend fun quickSendSnapshot(): List<ClipboardEntry>
+
     @Query("SELECT * FROM clipboard_entries WHERE text = :text AND isQuickSend = 0 LIMIT 1")
     suspend fun findByText(text: String): ClipboardEntry?
 

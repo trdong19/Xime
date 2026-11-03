@@ -1273,6 +1273,9 @@ private fun EnterCell(env: QwertyRowEnv, modifier: Modifier, fontSize: TextUnit?
 
 @Composable
 private fun DeleteCell(env: QwertyRowEnv, modifier: Modifier) {
+    // 退格滑动开关与步进距离（设置即时生效）：关掉后左右滑恢复 delLeft/delRight 旧行为
+    val sweepOn = SettingsPreferences.isBackspaceSweepEnabled(LocalContext.current)
+    val sweepStep = SettingsPreferences.getBackspaceSweepStepDp(LocalContext.current).toFloat()
     val delBinding = KeysConfigHelper.getGestureFor(env.section, "delete", env.isAsciiMode)
     val delTap = delBinding?.tap ?: KeyAction(GestureAction.DELETE)
     val delLong = delBinding?.longPress?.values?.firstOrNull()
@@ -1310,6 +1313,8 @@ private fun DeleteCell(env: QwertyRowEnv, modifier: Modifier) {
         },
         onSweepEnd = env.onBackspaceSweepFinish?.let { fin -> { fin() } },
         onSweepActivate = env.onBackspaceSweepActivate?.let { act -> { act() } },
+        sweepEnabled = sweepOn,
+        sweepStepDp = sweepStep,
         onSwipeStateChange = { state, bounds -> env.processSwipeState(state, bounds) },
         shadowEnabled = env.shadowEnabled,
         shadowElevation = env.shadowElevation,

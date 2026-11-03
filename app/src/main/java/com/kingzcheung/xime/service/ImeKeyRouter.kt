@@ -928,6 +928,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 候选栏 UI 更新保持平滑，抬手后最多多删 1~2 个字符。
      */
     internal fun handleDeleteKey() {
+        // 空闲态旁路：引擎部署/初始化期间（rimeLock 占用）keyJobs 会被堵住，排在其后
+        // 的删除全部无响应（覆盖安装后首次唤出键盘尤其明显）。空闲态删除是纯原生
+        // 路径（不碰引擎，见 processDeleteKey 分支 4），直接走独立线程执行，不再被
+        // 排在前面的堵路任务连累。组合态/英文待删/数字符号键盘仍走 keyJobs 保序。
+        val candState = service.candidateState.value
+        val layoutState = service.keyboardViewModel.keyboardState.value
+        val engineFree = !service.uiState.value.showQuickSendForm &&
+            candState.pendingEnglishText.isEmpty() && !candState.isComposing &&
+            candState.inputText.isEmpty() && candState.associationCandidates.isEmpty() &&
+            !candState.isShowingRecentClipboard &&
+            layoutState !is KeyboardLayoutState.Number && layoutState !is KeyboardLayoutState.Symbol
         val shouldLaunch = synchronized(service.deleteCoalesceLock) {
             if (service.deleteJobActive) {
                 service.pendingDeleteCount++
@@ -938,7 +949,19 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             }
         }
         if (!shouldLaunch) return
-        launchDeleteJob()
+        if (engineFree) {
+            service.serviceScope.launch(Dispatchers.Default) {
+                try {
+                    processDeleteKey()
+                } catch (t: Throwable) {
+                    FileLogger.e(XimeInputMethodService.TAG, "processDeleteKey(bypass) failed", t)
+                } finally {
+                    maybeScheduleFollowUp()
+                }
+            }
+        } else {
+            launchDeleteJob()
+        }
     }
 
     /**
@@ -1577,19 +1600,23 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             postRimeJob { commitPluginCandidate(action.commitText) }
             return
         }
+        // 展开页头部注入的快捷发送候选已由上方 plugin 分支处理；引擎候选整体
+        // 后移 expandedHostCount 位——引擎选择须平移回引擎自己的全局索引
+        val engineIndex = globalIndex - state.expandedHostCount
+        if (engineIndex < 0) return
         postRimeJob {
             // T9 方案的选词消费由 t9_processor 独立完成，直接调引擎 select 会
             // 遗留 [confirmed, phony] 残留组合态（见 selectCandidateAsync 注释），
             // 降级走候选栏同款路径；取词/注释必须用展开页同一份全量候选——
             // 全局索引与引擎当前页列表错位时会取错词/丢字
             if (isT9Schema(service.uiState.value.currentSchemaId)) {
-                selectCandidateAsync(globalIndex, expandedCandidate)
+                selectCandidateAsync(engineIndex, expandedCandidate)
                 return@postRimeJob
             }
-            val ok = service.rimeEngine.selectCandidateByGlobalIndex(globalIndex)
+            val ok = service.rimeEngine.selectCandidateByGlobalIndex(engineIndex)
             FileLogger.i(
                 "ImeKeyRouter",
-                "selectCandidateGlobal: index=$globalIndex ok=$ok"
+                "selectCandidateGlobal: index=$globalIndex engineIndex=$engineIndex ok=$ok"
             )
             if (!ok) return@postRimeJob
 
@@ -1614,7 +1641,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         hasPrevPage = false,
                         isShowingRecentClipboard = false,
                         expandedCandidates = emptyList(),
-                        expandedActions = emptyList()
+                        expandedActions = emptyList(),
+                        expandedHostCount = 0
                     )
                 }
             } else {
@@ -1630,7 +1658,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     internal fun deleteCandidateGlobal(globalIndex: Int) {
         postRimeJob {
             val state = service.candidateState.value
-            // 外部候选（智能纠错）：非实时会话词条，禁止按全局索引删除
+            // 外部候选（智能纠错）/快捷发送注入条目：非实时会话词条，禁止按全局索引删除
             val action = state.expandedActions.getOrNull(globalIndex)
             if (action != null && action.isPluginCandidate) {
                 FileLogger.i("ImeKeyRouter", "deleteCandidateGlobal: skip external index=$globalIndex")
@@ -1638,7 +1666,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             }
             val text = state.expandedCandidates.getOrNull(globalIndex)?.text
             if (text.isNullOrEmpty()) return@postRimeJob
-            val ok = service.rimeEngine.deleteCandidateByGlobalIndex(globalIndex)
+            // 引擎候选整体后移 expandedHostCount 位：删除须平移回引擎全局索引
+            val engineIndex = globalIndex - state.expandedHostCount
+            if (engineIndex < 0) return@postRimeJob
+            val ok = service.rimeEngine.deleteCandidateByGlobalIndex(engineIndex)
             FileLogger.i(
                 "ImeKeyRouter",
                 "deleteCandidateGlobal: text='$text' index=$globalIndex ok=$ok"
