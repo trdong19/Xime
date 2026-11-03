@@ -409,8 +409,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     // 动态回车：组合态提交编码；空闲态按编辑器 imeOptions 执行动作（发送/搜索/下一项…）或换行。
                     service.calculatorEngine.clear()
                     updateCalculatorCandidates()
-                    if (candState.isComposing) {
-                        commitComposingInput(candState, state.currentSchemaId)
+                    // T9 快速连打竞态：T9 字母直接进控制器后台队列（不经 keyJobs），回车若不等
+                    // 排空只提交引擎已处理到的那部分编码，剩余字母在回车后才处理、重新组成新
+                    // 组合挂在候选栏（需二次回车才能发完）。等队列+主线程状态落地后重读再提交。
+                    // 非 T9 的字母在 keyJobs 内同步处理（FIFO），回车 job 天然排在其后，无需等待。
+                    var effectiveCand = candState
+                    if (isT9Schema(state.currentSchemaId)) {
+                        service.t9InputControllerRef?.awaitPendingUpdates()
+                        effectiveCand = service.candidateState.value
+                    }
+                    if (effectiveCand.isComposing) {
+                        commitComposingInput(effectiveCand, state.currentSchemaId)
                         needsUIUpdate = true
                     } else {
                         service.rimeEngine.clearComposition()

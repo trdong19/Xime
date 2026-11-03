@@ -129,18 +129,19 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
             }
             // 内置快捷发送：编码命中（T9 数字码 input / 字母码 preedit）与内容命中，
-            // 插在第一候选之后（第二候选位，避免被候选栏折叠隐藏）
-            val nativeQuickT9 = service.quickSendNativeMatches(
+            // 插在第一候选之后（第二候选位，避免被候选栏折叠隐藏）；
+            // 注释 = 条目触发编码（无编码"快捷"），与常用语插件显示一致
+            val nativeQuickT9 = service.quickSendNativeMatchesAnnotated(
                 codes = listOf(inputText, rawPreedit, pendingEnglish),
                 engineCandidates = baseCands,
             )
             if (nativeQuickT9.isNotEmpty() && mergedCands.isNotEmpty()) {
                 val insertAt = minOf(1, mergedCands.size)
-                for ((k, phrase) in nativeQuickT9.withIndex()) {
-                    mergedCands.add(insertAt + k, phrase)
-                    mergedComments.add(insertAt + k, "")
+                for ((k, match) in nativeQuickT9.withIndex()) {
+                    mergedCands.add(insertAt + k, match.first)
+                    mergedComments.add(insertAt + k, match.second)
                     engineComments.add(insertAt + k, "")
-                    mergedActions.add(insertAt + k, CandidateAction.plugin(phrase))
+                    mergedActions.add(insertAt + k, CandidateAction.plugin(match.first))
                 }
             }
             displayCandidates = mergedCands
@@ -154,20 +155,20 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // 不能混入回显字符。历史上曾整体用 input 规避自装双拼插件的展开编码显示，
             // 代价是全拼丢失分隔符；现仅显示层恢复 librime 标准回显。
             displayText = if (preeditText.isNotEmpty()) preeditText else inputText
-            val nativeQuick = service.quickSendNativeMatches(
+            val nativeQuick = service.quickSendNativeMatchesAnnotated(
                 codes = listOf(inputText, preeditText, pendingEnglish),
                 engineCandidates = filteredTexts,
             )
-            nativeQuickActions = nativeQuick.map { CandidateAction.plugin(it) }
-            // 编码命中插第二候选位（可见性）；内容命中追加末尾
+            nativeQuickActions = nativeQuick.map { CandidateAction.plugin(it.first) }
+            // 编码命中插第二候选位（可见性）；内容命中追加末尾。注释 = 触发编码/"快捷"
             val nativeHead = nativeQuick.take(1)
             val nativeTail = nativeQuick.drop(1)
             displayCandidates = if (nativeHead.isNotEmpty() && filteredTexts.isNotEmpty())
-                listOf(filteredTexts.first()) + nativeHead + filteredTexts.drop(1) + nativeTail
-                else filteredTexts + nativeTail
+                listOf(filteredTexts.first()) + nativeHead.map { it.first } + filteredTexts.drop(1) + nativeTail.map { it.first }
+                else filteredTexts + nativeTail.map { it.first }
             displayComments = if (nativeHead.isNotEmpty() && filteredTexts.isNotEmpty())
-                listOf(displayToneComments.firstOrNull() ?: "") + nativeHead.map { "" } + displayToneComments.drop(1) + nativeTail.map { "" }
-                else displayToneComments + nativeTail.map { "" }
+                listOf(displayToneComments.firstOrNull() ?: "") + nativeHead.map { it.second } + displayToneComments.drop(1) + nativeTail.map { it.second }
+                else displayToneComments + nativeTail.map { it.second }
             isComposing = inputText.isNotEmpty()
         }
 

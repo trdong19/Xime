@@ -107,6 +107,11 @@ data class KeyboardCallbacks(
      */
     var onT9ForceSendToRime: (() -> Unit)? = null,
     /**
+     * T9 控制器就绪：键盘层创建 remember 的控制器实例后登记给服务层
+     * （回车等需要等待其后台队列排空的路径经由服务层持有引用）。
+     */
+    var onT9ControllerCreated: ((com.kingzcheung.xime.rime.T9InputController) -> Unit)? = null,
+    /**
      * T9 候选词过滤器。服务层在获取 RIME 候选词后调用，由键盘层根据
      * [com.kingzcheung.xime.rime.T9InputController.selectionHistory] 过滤不匹配的候选词。
      * @param candidates 候选词文本列表

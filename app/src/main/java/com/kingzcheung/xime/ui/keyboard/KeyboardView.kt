@@ -160,6 +160,7 @@ fun KeyboardView(
             candidateTransform = callbacks.onTCandidateTransform,
         )
     }
+    SideEffect { callbacks.onT9ControllerCreated?.invoke(t9Controller) }
 
     LaunchedEffect(state.inputSessionId) {
         t9Controller.reset()
@@ -859,6 +860,8 @@ fun KeyboardView(
                                     var lastSteps = 0
                                     var lastStepTime = 0L
                                     var lastJumpSteps = Int.MIN_VALUE
+                                    var lastFireTime = 0L
+                                    var fireIntervalEma = 0L
                                     var activationAnchorX = down.position.x
 
                                     // 手势结束即清标志，避免跨手势残留（26 键已改按本次手势峰值判定）
@@ -901,6 +904,13 @@ fun KeyboardView(
                                                         val delta = if (steps > lastSteps) 1 else -1
                                                         currentOnCursorMove.value?.invoke(delta)
                                                         lastSteps = steps
+                                                        // 步进节奏 EMA：贴边自动移动按此节奏复现"当时的手指速度"
+                                                        val fireInterval = if (lastFireTime == 0L) 0L else now - lastFireTime
+                                                        lastFireTime = now
+                                                        if (fireInterval in 1L..999L) {
+                                                            fireIntervalEma = if (fireIntervalEma == 0L) fireInterval
+                                                            else (fireIntervalEma * 2 + fireInterval) / 3
+                                                        }
                                                     }
                                                     // 行首/行尾跳转：横滑激活后下滑累计 ≥ 25dp →
                                                     // 按滑动方向跳（左滑方向→行头、右滑方向→行尾），手势结束
@@ -912,26 +922,28 @@ fun KeyboardView(
                                                         currentOnCursorJump.value?.invoke(dx > 0)
                                                         break
                                                     }
-                                                    // 边缘持续移动：手指贴住容器左右边缘不放，光标自动
-                                                    // 持续移动（先慢后快），离开边缘或抬手即停
+                                                    // 边缘持续移动：手指贴住容器左右边缘不放，光标按贴边前
+                                                    // 手指的实际步进节奏持续移动（快则快、慢则慢，不自动加速），
+                                                    // 离开边缘或抬手即停
                                                     val inEdge = size.width > 0 &&
                                                         (change.position.x < size.width * 0.12f || change.position.x > size.width * 0.88f)
                                                     if (inEdge && (edgeHandler == null || edgeDir != if (dx > 0) 1 else -1)) {
                                                         edgeHandler?.let { viewHandler.removeCallbacks(it) }
                                                         edgeDir = if (dx > 0) 1 else -1
-                                                        var delayMs = 220L
-                                                        var chars = 1
                                                         val dirLocal = edgeDir
                                                         val runnable = object : Runnable {
                                                             override fun run() {
-                                                                // 逐字移动，速度加快=触发频率递增（50ms 封顶）
                                                                 currentOnCursorMove.value?.invoke(dirLocal)
-                                                                delayMs = (delayMs * 0.6f).toLong().coerceAtLeast(50L)
-                                                                viewHandler.postDelayed(this, delayMs)
+                                                                // 每拍重读节奏 EMA：贴边中手指仍在微动则跟着变
+                                                                val delay = (if (fireIntervalEma in 1L..999L) fireIntervalEma else 220L)
+                                                                    .coerceIn(24L, 250L)
+                                                                viewHandler.postDelayed(this, delay)
                                                             }
                                                         }
                                                         edgeHandler = runnable
-                                                        viewHandler.postDelayed(runnable, 220L)
+                                                        val firstDelay = (if (fireIntervalEma in 1L..999L) fireIntervalEma else 220L)
+                                                            .coerceIn(24L, 250L)
+                                                        viewHandler.postDelayed(runnable, firstDelay)
                                                     } else if (!inEdge && edgeHandler != null) {
                                                         edgeHandler?.let { viewHandler.removeCallbacks(it) }
                                                         edgeHandler = null

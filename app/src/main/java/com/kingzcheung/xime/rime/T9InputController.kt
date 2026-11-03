@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * 九键拼音输入控制器（薄包装）。
@@ -105,6 +106,20 @@ class T9InputController(
      */
     private fun awaitT9Queue() {
         lastT9Job?.let { runBlocking { it.join() } }
+    }
+
+    /**
+     * 同步等待后台队列排空 + 已投递到主线程的 UI 状态落地（回车提交前调用）。
+     * 快速连打时回车若不等队列排空，只提交引擎已处理到的那部分编码，剩余字母
+     * 在回车之后才被处理、重新组成新组合挂在候选栏（需二次回车才能发完）。
+     * 必须且只会被**非主线程**调用（服务层 keyProcessingDispatcher）；
+     * 队列空闲且无在途投递时立即返回。
+     */
+    fun awaitPendingUpdates() {
+        lastT9Job?.let { runBlocking { it.join() } }
+        // 主线程屏障：主线程 FIFO 上先于本调用投递的 UI 更新（onT9RefreshComposition
+        // → applyComposition 写 candidateState）全部执行完后才返回
+        runBlocking { withContext(Dispatchers.Main) {} }
     }
 
     /** UI 显示的缓冲区字符串 = 最近一次 flush 快照的 input（缓存，非主线程 JNI） */

@@ -390,6 +390,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     internal var editingCaretInput: String = ""
     /** 键盘回调引用，用于在 RIME selectCandidate 前同步通知 T9 控制器 */
     internal var keyboardCallbacks: KeyboardCallbacks? = null
+    /** T9 控制器（键盘层 remember 创建后经 onT9ControllerCreated 登记）：回车提交前等待其后台队列排空 */
+    @Volatile internal var t9InputControllerRef: T9InputController? = null
     internal var isChineseMode = true
     /** 悬浮卡片实测矩形（窗口坐标，px）：FloatingKeyboardContainer 布局后回传，
      *  触摸区（onComputeInsets）的唯一真源；null = 尚未实测（走 FloatingCardGeometry 兜底） */
@@ -3341,22 +3343,21 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     /**
-     * 退格滑动抬手结算：清字符栈，删除会话差值记账写入 [lastClearedText]
-     * （滑动全程是一个删除会话：按下时 beginDeleteSession 已由单击路径触发，
-     * 未触发时首次 deleteOne 已补开）——下滑撤回（undo_clear）对滑动删除的
-     * 净删除照常生效。
+     * 退格滑动抬手：清字符栈。删除会话**不在此结算**——与单击删除同一套会话
+     * 节奏（会话跨手势保持开账、累积差值），由下滑撤回（undo_clear）/按别的键/
+     * 右滑恢复（restoreOne 先结算）收口。若在此结算，每次抬手一笔账会把
+     * 单槽 [lastClearedText] 覆盖成只剩最后一次滑动删的内容，下滑撤回就
+     * 只能恢复一个字（2026-11-02 用户实测反馈）。
      */
     /**
-     * 退格滑动激活：结算当前删除会话（长按连删/单击已删的内容入撤销槽），
-     * 并为滑动开启新账——此后右滑恢复回捡的是「本手势之前删掉的内容」，
-     * 与滑动中删除的字符互不污染。
+     * 退格滑动激活（30dp 达阈）：确保删除会话已开账（未开则现在开，已开则
+     * 保持——跨手势累积），不再结算重开新账。
      */
     internal fun onBackspaceSweepActivate() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post { onBackspaceSweepActivate() }
             return
         }
-        finishDeleteSession()
         beginDeleteSession()
     }
 
@@ -3379,8 +3380,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             mainHandler.post { onBackspaceSweepFinish() }
             return
         }
+        // 只清字符栈；删除会话保持开账（跨手势累积，见 onBackspaceSweepActivate 注释）
         sweepRemovedChars.clear()
-        finishDeleteSession()
     }
 
     /**
@@ -3401,10 +3402,19 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             code.lowercase().mapNotNull { t9KeyMap[it.lowercaseChar()] }.joinToString("")
         } else null
 
-    internal fun quickSendNativeMatches(codes: List<String>, engineCandidates: List<String>): List<String> {
+    internal fun quickSendNativeMatches(codes: List<String>, engineCandidates: List<String>): List<String> =
+        quickSendNativeMatchesAnnotated(codes, engineCandidates).map { it.first }
+
+    /**
+     * 快捷发送候选（带注释）：注释 = 条目触发编码（无编码条目显示"快捷"），
+     * 与常用语插件的 commentOf 行为一致——短语本身保持干净，编码走注释槽位
+     * （与声调注释同款渲染）。
+     */
+    internal fun quickSendNativeMatchesAnnotated(codes: List<String>, engineCandidates: List<String>): List<Pair<String, String>> {
         val items = quickSendItemsState.value
         if (items.isEmpty()) return emptyList()
-        val out = ArrayList<String>()
+        val out = ArrayList<Pair<String, String>>()
+        val seen = HashSet<String>()
         for (item in items) {
             val code = item.code?.takeIf { it.isNotEmpty() }
             val codeHit = code != null && codes.any { it.isNotEmpty() && it.startsWith(code) }
@@ -3413,8 +3423,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 codes.any { it.isNotEmpty() && it.startsWith(digits) }
             } == true
             val contentHit = engineCandidates.any { it.isNotEmpty() && item.text.startsWith(it) }
-            if (codeHit || digitHit || contentHit) {
-                if (item.text !in out) out.add(item.text)
+            if ((codeHit || digitHit || contentHit) && seen.add(item.text)) {
+                out.add(item.text to (code ?: "快捷"))
             }
         }
         return out

@@ -394,6 +394,9 @@ internal fun rememberImeKeyboardCallbacks(
                 // T9 后台线程（t9Dispatcher）调用：同步等插件至多 15ms，主线程零等待
                 service.candidateTransform.transformForT9(result)
             },
+            onT9ControllerCreated = { controller ->
+                service.t9InputControllerRef = controller
+            },
             onBackspaceSweepDeleteStep = {
                 service.onBackspaceSweepDeleteStep()
             },
