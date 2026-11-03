@@ -433,7 +433,7 @@ fun ClipboardView(
                             }
                         ),
                         LongPressMenuEntry(
-                            icon = Icons.Default.Edit,
+                            icon = Icons.Default.Create,
                             label = tr(R.string.s_cunweichangyongyu),
                             onClick = {
                                 onQuickSendCreateFromText?.invoke(anchor.item.text)
