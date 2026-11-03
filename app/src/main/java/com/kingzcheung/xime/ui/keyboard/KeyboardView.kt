@@ -352,7 +352,7 @@ fun KeyboardView(
                 } else {
                     CandidateBarState.from(
                         candidates = if (railExpanded.isNotEmpty()) railExpanded.map { it.second.text } else cs.candidates,
-                        candidateComments = if (railExpanded.isNotEmpty()) railExpanded.map { (i, c) -> cs.t9CommentOverrides[c.text] ?: c.comment } else cs.candidateComments,
+                        candidateComments = if (railExpanded.isNotEmpty()) railExpanded.map { (i, c) -> cs.t9CommentOverrides[c.text] ?: (PinyinTone.annotate(c.text, c.comment) ?: c.comment) } else cs.candidateComments,
                         inputText = cs.inputText,
                         preeditText = cs.preeditText,
                         isComposing = cs.isComposing,
@@ -1637,7 +1637,10 @@ fun KeyboardView(
                         backgroundColor = keyboardBgColor,
                         viewModel = viewModel,
                         onBack = { viewModel.popOverlay() },
-                        onNavigateToQuickSend = { viewModel.pushOverlay(OverlayRoute.Clipboard(1)) },
+                        onQuickSendCreateFromText = { text ->
+                            viewModel.closeOverlay()
+                            callbacks.onQuickSendCreateFromText?.invoke(text)
+                        },
                         onSelectChar = { char -> callbacks.onCommitText?.invoke(char) },
                         onDeleteText = { count -> callbacks.onDeleteText?.invoke(count) },
                         bottomPaddingDp = state.keyboardBottomPaddingDp,

@@ -428,6 +428,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             if (candidateState.value.expandedCandidates.isNotEmpty()) {
                 candidateState.value = candidateState.value.copy(
                     expandedCandidates = emptyList(),
+                    expandedHostCount = 0,
                     expandedActions = emptyList()
                 )
             }
@@ -436,10 +437,33 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val perfT0 = android.os.SystemClock.elapsedRealtime()
         // 纠错候选由 librime 插件（correction_translator）直接产出并参与引擎排序，
         // 展开页只需拉取引擎的跨页全量候选，不再在 Kotlin 侧合成候选。
-        val all = rimeEngine.getAllCandidates().toList()
+        val engineAll = rimeEngine.getAllCandidates().toList()
+        // 快捷发送候选注入展开页：与主候选栏同位（第一位候选之后，避免被折叠隐藏）、
+        // 注释=触发编码/"快捷"、与引擎候选按文本去重（否则同词出现两次）。
+        // 注入条目走 expandedActions 直接上屏；引擎候选的全局索引由路由侧按
+        // expandedHostCount 平移回引擎全局索引（selectCandidateGlobal/deleteCandidateGlobal）
+        val hostMatches = quickSendNativeMatchesAnnotated(
+            codes = listOf(rimeEngine.getInput(), candidateState.value.pendingEnglishText),
+            engineCandidates = emptyList()
+        )
+        val hostCount = hostMatches.size
+        val builder = ArrayList<RimeCandidate>(engineAll.size + hostCount)
+        val hostPositions = HashSet<Int>()
+        val hostTexts = hostMatches.map { it.first }.toSet()
+        val dedupedEngine = engineAll.filter { it.text !in hostTexts }
+        val insertAt = minOf(1, dedupedEngine.size)
+        builder.addAll(dedupedEngine.take(insertAt))
+        hostMatches.forEach { match ->
+            hostPositions.add(builder.size)
+            builder.add(RimeCandidate(match.first, match.second))
+        }
+        builder.addAll(dedupedEngine.drop(insertAt))
         candidateState.value = candidateState.value.copy(
-            expandedCandidates = all,
-            expandedActions = emptyList()
+            expandedCandidates = builder,
+            expandedActions = if (hostCount == 0) emptyList() else List(builder.size) { i ->
+                if (i in hostPositions) CandidateAction.plugin(builder[i].text) else CandidateAction.engine(i)
+            },
+            expandedHostCount = hostCount
         )
         android.util.Log.d(
             "CandidatePerf",

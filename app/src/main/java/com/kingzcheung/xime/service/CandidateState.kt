@@ -29,6 +29,10 @@ data class CandidateState(
     val expandedCandidates: List<RimeCandidate> = emptyList(),
     /** 与 [expandedCandidates] 平行的上屏动作（引擎引用 / 外部纠错候选）。空 = 纯引擎语义。 */
     val expandedActions: List<CandidateAction> = emptyList(),
+    /** 展开页注入的快捷发送候选数（插在第一位候选之后、与引擎候选去重）：
+     *  注入索引走 expandedActions 直接上屏；引擎候选的全局索引在路由侧按本值平移
+     *  （ImeKeyRouter.selectCandidateGlobal/deleteCandidateGlobal）。 */
+    val expandedHostCount: Int = 0,
     /** 编码显示串中的光标偏移（字符，-1 = 末尾/非编辑态）。
      *  全键盘组合态滑动编辑时由服务层从 editingCaretPos 映射（快照比对自愈），供气泡竖线与输入框光标。 */
     val preeditCaretPos: Int = -1,

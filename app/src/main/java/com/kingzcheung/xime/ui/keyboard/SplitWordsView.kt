@@ -109,7 +109,7 @@ fun SplitWordsView(
     backgroundColor: Color,
     viewModel: KeyboardViewModel,
     onBack: () -> Unit,
-    onNavigateToQuickSend: (() -> Unit)? = null,
+    onQuickSendCreateFromText: ((String) -> Unit)? = null,
     onSelectChar: (String) -> Unit,
     onDeleteText: ((Int) -> Unit)? = null,
     bottomPaddingDp: Int = 0,
@@ -183,8 +183,8 @@ fun SplitWordsView(
                 onClick = {
                     val text = selectedIndices.joinToString("") { splitParts[it] }
                     if (text.isNotEmpty()) {
-                        viewModel.addQuickSendText(text)
-                        onNavigateToQuickSend?.invoke()
+                        // 打开预填表单（可补触发编码）而非静默入库——与剪贴板长按「添加快捷」同流程
+                        onQuickSendCreateFromText?.invoke(text)
                     }
                 }
             ) {
