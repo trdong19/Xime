@@ -428,7 +428,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             if (candidateState.value.expandedCandidates.isNotEmpty()) {
                 candidateState.value = candidateState.value.copy(
                     expandedCandidates = emptyList(),
-                    expandedHostCount = 0,
                     expandedActions = emptyList()
                 )
             }
@@ -437,22 +436,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val perfT0 = android.os.SystemClock.elapsedRealtime()
         // 纠错候选由 librime 插件（correction_translator）直接产出并参与引擎排序，
         // 展开页只需拉取引擎的跨页全量候选，不再在 Kotlin 侧合成候选。
-        val engineAll = rimeEngine.getAllCandidates().toList()
-        // 快捷发送候选注入展开页头部（编码命中，与主候选栏同源；注释=触发编码/"快捷"）：
-        // 头部条目走 expandedActions 直接上屏；引擎候选的全局索引由路由侧按
-        // expandedHostCount 平移回引擎全局索引（selectCandidateGlobal/deleteCandidateGlobal）
-        val hostMatches = quickSendNativeMatchesAnnotated(
-            codes = listOf(rimeEngine.getInput(), candidateState.value.pendingEnglishText),
-            engineCandidates = emptyList()
-        )
-        val hostCount = hostMatches.size
-        val all: List<RimeCandidate> = if (hostCount == 0) engineAll else
-            hostMatches.map { RimeCandidate(it.first, it.second) } + engineAll
+        val all = rimeEngine.getAllCandidates().toList()
         candidateState.value = candidateState.value.copy(
             expandedCandidates = all,
-            expandedActions = if (hostCount == 0) emptyList()
-                else hostMatches.map { CandidateAction.plugin(it.first) },
-            expandedHostCount = hostCount
+            expandedActions = emptyList()
         )
         android.util.Log.d(
             "CandidatePerf",
@@ -3114,8 +3101,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     private fun commitTextAndPredict(text: String, isPaste: Boolean) {
-        // 新文字上屏 = 撤销历史终结（标准 undo 语义）：清空滑动删除/恢复的所有记录，
-        // 防止很久以前删除的内容被右滑恢复插进新文字中间
+        // 新文字上屏 = 撤销历史终结（标准 undo 语义）：先结算未决删除会话再清全部记录。
+        // 必须在此结算：T9 字母直进控制器不经 keyJobs，"按别的键→结算"对 T9 不生效——
+        // 若不结算，开着的会话快照横跨新输入变陈旧（如删"大家好"→输"你们好"→删"你们好"），
+        // 下次下滑撤回按陈旧快照算差值，恢复的是上上段的"大家好"而非"你们好"。
+        finishDeleteSession()
         sweepRemovedChars.clear()
         lastClearedText = ""
         lastUndoAnchorText = null

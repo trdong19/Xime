@@ -284,7 +284,7 @@
     <string name="s_yixuan_xiang">已选 %1$s 项</string>
     <string name="s_duoxuan">多选</string>
     <string name="s_kuaijie">快捷</string>
-    <string name="s_cunweichangyongyu">存为常用语</string>
+    <string name="s_cunrukuaijiefasong">存入快捷发送</string>
     <string name="s_zhiding">置顶</string>
     <string name="s_guangbiaoshoushi">光标手势</string>
     <string name="s_guangbiaoshoushi_f">横滑移动光标、贴边持续移动（速度跟随手指）</string>
