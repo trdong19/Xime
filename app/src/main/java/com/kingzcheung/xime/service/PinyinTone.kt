@@ -95,6 +95,23 @@ object PinyinTone {
     fun annotate(text: String, comment: String): String? =
         if (!initialized) null else annotateWith(table, text, comment, toneSyllable)
 
+    /**
+     * 文本的无调全拼（音节空格分隔，"你好"→"ni hao"），供搜索做拼音匹配。
+     * 与 [annotate] 不同：不需要引擎注释，直接按字表逐字取音节。
+     * 任一汉字不在字表、文本无汉字或未初始化时返回 null（调用方退回子串匹配）。
+     */
+    fun plainPinyin(text: String): String? {
+        if (!initialized) return null
+        val sb = StringBuilder()
+        for (ch in text) {
+            if (!HAN_RE.matches(ch.toString())) continue
+            val arr = table[ch.toString()] ?: return null
+            if (sb.isNotEmpty()) sb.append(' ')
+            sb.append(arr[0])
+        }
+        return if (sb.isEmpty()) null else sb.toString()
+    }
+
     /** 纯函数版本（可 JVM 单测）：[tbl] 为 字 -> [无调, 数字调, 符号调]。 */
     internal fun annotateWith(
         tbl: Map<String, Array<String>>,

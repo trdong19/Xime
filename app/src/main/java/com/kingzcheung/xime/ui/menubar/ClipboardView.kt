@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.StarBorder
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.twotone.Image
 import androidx.compose.material.icons.twotone.Sync
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,8 +66,10 @@ import coil.compose.AsyncImage
 import com.kingzcheung.xime.R
 import com.kingzcheung.xime.clipboard.ClipboardDragSender
 import com.kingzcheung.xime.clipboard.ClipboardItem
+import com.kingzcheung.xime.clipboard.db.ClipboardEntry
 import com.kingzcheung.xime.clipboard.clipboardLongPressDrag
 import com.kingzcheung.xime.i18n.tr
+import com.kingzcheung.xime.service.PinyinTone
 import com.kingzcheung.xime.ui.CLIPBOARD_CARD_MAX_PX
 import com.kingzcheung.xime.ui.keyboard.WIDE_CONTAINER_WIDTH
 import com.kingzcheung.xime.ui.keyboard.tolerantClick
@@ -115,6 +120,7 @@ fun ClipboardView(
     var isMultiSelect by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var showClearConfirm by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     fun exitMultiSelect() {
         isMultiSelect = false
@@ -281,6 +287,64 @@ fun ClipboardView(
             }
         }
 
+        // 增强搜索：子串（忽略大小写）+ 拼音全拼/首字母前缀（内置拼音字表）。
+        // 图片条目无文本，搜索态下隐藏
+        val q = searchQuery.trim()
+        val queryLower = q.lowercase()
+        val searching = q.isNotEmpty()
+        val shownClipboard = if (!searching) clipboardItems else clipboardItems.filter { item ->
+            item.type != ClipboardEntry.TYPE_IMAGE && matchesSearch(item.text, queryLower)
+        }
+        val shownQuickSend = if (!searching) quickSendItems else quickSendItems.filter { matchesSearch(it.text, queryLower) }
+
+        // 搜索框（增强搜索：子串 + 拼音全拼/首字母）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(itemBgColor),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = subTextColor,
+                modifier = Modifier
+                    .padding(start = 10.dp)
+                    .size(16.dp)
+            )
+            BasicTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = textColor),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                decorationBox = { inner ->
+                    if (searchQuery.isEmpty()) {
+                        Text(
+                            text = tr(R.string.s_sousuo),
+                            style = LocalTextStyle.current.copy(fontSize = 13.sp, color = subTextColor)
+                        )
+                    }
+                    inner()
+                }
+            )
+            if (searchQuery.isNotEmpty()) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    tint = subTextColor,
+                    modifier = Modifier
+                        .padding(end = 10.dp)
+                        .size(16.dp)
+                        .clickable { searchQuery = "" }
+                )
+            }
+        }
+
         val pagerState = rememberPagerState(
             initialPage = selectedTab,
             pageCount = { 2 }
@@ -304,7 +368,7 @@ fun ClipboardView(
         ) { page ->
             if (page == 0) {
                 ClipboardTabContent(
-                    items = clipboardItems,
+                    items = shownClipboard,
                     itemBgColor = itemBgColor,
                     textColor = textColor,
                     subTextColor = subTextColor,
@@ -328,7 +392,7 @@ fun ClipboardView(
                 )
             } else {
                 QuickSendTabContent(
-                    items = quickSendItems,
+                    items = shownQuickSend,
                     itemBgColor = itemBgColor,
                     textColor = textColor,
                     subTextColor = subTextColor,
@@ -965,4 +1029,16 @@ fun LongPressMenuItem(
             fontSize = 14.sp
         )
     }
+}
+
+/** 增强搜索匹配：子串（忽略大小写）+ 拼音全拼/首字母前缀（内置拼音字表覆盖的汉字文本）。 */
+private fun matchesSearch(text: String, queryLower: String): Boolean {
+    if (queryLower.isEmpty()) return true
+    if (text.contains(queryLower, ignoreCase = true)) return true
+    // 拼音匹配仅对含字母的查询启用（纯中文查询走子串）
+    if (queryLower.none { it in 'a'..'z' }) return false
+    val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
+    if (py.replace(" ", "").startsWith(queryLower)) return true
+    val initials = py.split(' ').mapNotNull { it.firstOrNull()?.toString() }.joinToString("")
+    return initials.startsWith(queryLower)
 }
