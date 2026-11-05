@@ -408,7 +408,8 @@ fun KeyboardView(
 
             // 半屏剪贴板面板：渲染在键盘上方扩展槽，键盘保持可见可交互
             //（全屏覆盖分支对 Clipboard 路由已按 stackedClipboard 跳过）
-            if (page is KeyboardPage.Overlay && page.route is OverlayRoute.Clipboard &&
+            val pageForPanel = page
+            if (pageForPanel is KeyboardPage.Overlay && pageForPanel.route is OverlayRoute.Clipboard &&
                 !state.isFloatingMode
             ) {
                 ClipboardView(
@@ -1511,8 +1512,9 @@ fun KeyboardView(
         if (page is KeyboardPage.Overlay) {
             // 半屏模式：剪贴板面板渲染在键盘上方的扩展槽（见 QuickSendFormArea 槽位），
             // 键盘/候选栏保持可见可交互——其它面板与浮窗模式维持全屏覆盖
+            val pageForStack = page
             val stackedClipboard = !state.isFloatingMode &&
-                page.route is OverlayRoute.Clipboard
+                pageForStack is KeyboardPage.Overlay && pageForStack.route is OverlayRoute.Clipboard
             if (!stackedClipboard) {
             Box(
                 modifier = Modifier
