@@ -123,16 +123,16 @@ internal fun rememberImeKeyboardCallbacks(
             onClipboard = {},
             onClipboardSelect = { text ->
                 // 点选条目上屏前先退出搜索模式（避免上屏内容被拦进搜索词）
-                service.keyboardViewModel.setClipboardSearchFocused(false)
+                service.keyboardViewModel.exitClipboardSearch()
                 service.textCommit.selectClipboardItem(text)
             },
             onClipboardImageSelect = { item ->
-                service.keyboardViewModel.setClipboardSearchFocused(false)
+                service.keyboardViewModel.exitClipboardSearch()
                 service.textCommit.selectClipboardImage(item)
             },
             onClipboardPullRemote = { service.clipboardSyncBridge?.pullOnce() },
             onCommitText = { text ->
-                service.keyboardViewModel.setClipboardSearchFocused(false)
+                service.keyboardViewModel.exitClipboardSearch()
                 service.textCommit.commitClipboardText(text)
             },
             onDeleteText = { count -> service.textCommit.deleteClipboardChars(count) },

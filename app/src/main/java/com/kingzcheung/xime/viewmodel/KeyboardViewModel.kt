@@ -146,14 +146,38 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private val _candidatePageExpanded = MutableStateFlow(false)
     val candidatePageExpanded: StateFlow<Boolean> = _candidatePageExpanded.asStateFlow()
 
-    /** 剪贴板半屏面板搜索：聚焦时按键输入进搜索词（不进引擎/不上屏），半屏面板下直接用键盘打字 */
+    /** 剪贴板半屏面板搜索：聚焦时页面切回 Main（键盘正常渲染），面板走键盘上方扩展槽；
+     *  退出时恢复剪贴板 Overlay 页（正常高度全屏面板）。 */
     val clipboardSearchFocused = MutableStateFlow(false)
     val clipboardSearchQuery = MutableStateFlow("")
+    val clipboardSearchTab = MutableStateFlow(0)
+    private var clipboardSearchReturnPage: KeyboardPage? = null
 
-    /** 聚焦/退出搜索（退出时清空搜索词）。 */
-    fun setClipboardSearchFocused(focused: Boolean) {
-        clipboardSearchFocused.value = focused
-        if (!focused) clipboardSearchQuery.value = ""
+    /** 进入搜索：记住当前剪贴板 Overlay 页（含页签），页面切回 Main 让键盘渲染。 */
+    fun enterClipboardSearch() {
+        val current = _page.value
+        if (current is KeyboardPage.Overlay && current.route is OverlayRoute.Clipboard) {
+            clipboardSearchReturnPage = current
+            clipboardSearchTab.value = current.route.tab
+            clipboardSearchFocused.value = true
+            _page.value = KeyboardPage.Main(MainType.FULL)
+            _syncViewState()
+        }
+    }
+
+    /** 退出搜索：清空搜索词，恢复剪贴板 Overlay 页（正常高度全屏面板）。 */
+    fun exitClipboardSearch() {
+        clipboardSearchFocused.value = false
+        clipboardSearchQuery.value = ""
+        clipboardSearchReturnPage?.let {
+            _page.value = it
+            _syncViewState()
+        }
+        clipboardSearchReturnPage = null
+    }
+
+    fun clearClipboardSearchQuery() {
+        clipboardSearchQuery.value = ""
     }
 
     fun appendClipboardSearch(text: String) {
@@ -162,6 +186,10 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     fun dropClipboardSearchLast() {
         clipboardSearchQuery.value = clipboardSearchQuery.value.dropLast(1)
+    }
+
+    fun setClipboardSearchTab(tab: Int) {
+        clipboardSearchTab.value = tab
     }
 
     /** 打开/收起候选展开页。 */
@@ -636,6 +664,7 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
             _page.value = current.behind
             clipboardSearchFocused.value = false
             clipboardSearchQuery.value = ""
+            clipboardSearchReturnPage = null
             _syncViewState()
         }
     }

@@ -102,7 +102,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     return
                 }
                 "enter", "newline" -> {
-                    service.keyboardViewModel.setClipboardSearchFocused(false)
+                    service.keyboardViewModel.exitClipboardSearch()
                     return
                 }
                 "space" -> {

@@ -406,20 +406,19 @@ fun KeyboardView(
                 )
             }
 
-            // 半屏剪贴板面板：渲染在键盘上方扩展槽，键盘保持可见可交互
-            //（全屏覆盖分支对 Clipboard 路由已按 stackedClipboard 跳过）
-            val pageForPanel = page
-            if (pageForPanel is KeyboardPage.Overlay && pageForPanel.route is OverlayRoute.Clipboard &&
-                !state.isFloatingMode
-            ) {
+            // 半屏剪贴板面板（搜索模式）：页面已切回 Main（键盘正常渲染），
+            // 面板渲染在键盘上方扩展槽；退出搜索恢复剪贴板 Overlay 页（正常高度全屏面板）
+            val clipboardSearchFocused = viewModel.clipboardSearchFocused.collectAsStateWithLifecycle().value
+            if (clipboardSearchFocused) {
                 ClipboardView(
                     clipboardItems = state.clipboardItems,
                     quickSendItems = state.quickSendItems,
-                    selectedTab = clipboardTab ?: 0,
+                    selectedTab = viewModel.clipboardSearchTab.value,
                     backgroundColor = keyboardBgColor,
                     keyTextColor = keyTextColor,
                     keyBgColor = keyBgColor,
                     viewModel = viewModel,
+                    showSearch = !isLandscape,
                     onSelectItem = { text ->
                         callbacks.onClipboardSelect?.invoke(text)
                         viewModel.closeOverlay()
@@ -430,10 +429,10 @@ fun KeyboardView(
                     },
                     imageFileOf = { item -> viewModel.clipboardManager.imageFileOf(item) },
                     onSplitWords = { text, _ -> viewModel.pushOverlay(OverlayRoute.SplitWords(text)) },
-                    onBack = { viewModel.closeOverlay() },
-                    onClipboardTabChange = { viewModel.pushOverlay(OverlayRoute.Clipboard(it)) },
+                    onBack = { viewModel.exitClipboardSearch() },
+                    onClipboardTabChange = { viewModel.setClipboardSearchTab(it) },
                     bottomPaddingDp = 0,
-                    modifier = Modifier.fillMaxWidth().height(280.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (isLandscape) 160.dp else 280.dp),
                     onQuickSendAddClick = {
                         viewModel.closeOverlay()
                         callbacks.onShowQuickSendForm?.invoke()
@@ -1510,12 +1509,6 @@ fun KeyboardView(
         }
 
         if (page is KeyboardPage.Overlay) {
-            // 半屏模式：剪贴板面板渲染在键盘上方的扩展槽（见 QuickSendFormArea 槽位），
-            // 键盘/候选栏保持可见可交互——其它面板与浮窗模式维持全屏覆盖
-            val pageForStack = page
-            val stackedClipboard = !state.isFloatingMode &&
-                pageForStack is KeyboardPage.Overlay && pageForStack.route is OverlayRoute.Clipboard
-            if (!stackedClipboard) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1718,7 +1711,6 @@ fun KeyboardView(
             }
         }
         }
-            }
     }
 }
 }

@@ -93,6 +93,8 @@ fun ClipboardView(
     modifier: Modifier = Modifier,
     onQuickSendAddClick: (() -> Unit)? = null,
     onQuickSendEditItem: ((Long, String, String) -> Unit)? = null,
+    /** 是否显示搜索栏（横屏半屏面板不显示，避免撑高触发收起）。 */
+    showSearch: Boolean = true,
     /** 剪贴板条目"存为常用语"：打开快捷发送表单并预填内容。 */
     onQuickSendCreateFromText: ((String) -> Unit)? = null,
     onPullRemote: (() -> Unit)? = null,
@@ -297,40 +299,47 @@ fun ClipboardView(
         }
         val shownQuickSend = if (!searching) quickSendItems else quickSendItems.filter { matchesSearch(it.text, queryLower) }
 
-        // 搜索栏：点按切换聚焦；聚焦时用下方键盘输入（子串 + 拼音全拼/首字母过滤）
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (searchFocused) accentColor.copy(alpha = 0.15f) else itemBgColor)
-                .clickable { viewModel.setClipboardSearchFocused(!searchFocused) }
-                .padding(horizontal = 10.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null,
-                tint = if (searchFocused) accentColor else subTextColor,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (searchQuery.isBlank()) tr(R.string.s_sousuotishi) else searchQuery,
-                color = if (searchQuery.isBlank()) subTextColor else textColor,
-                fontSize = 13.sp,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-            if (searchQuery.isNotEmpty()) {
+        // 搜索栏：点按进入搜索（半屏+键盘，撑高）；再点退出恢复全屏面板（正常高度）
+        if (showSearch) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (searchFocused) accentColor.copy(alpha = 0.15f) else itemBgColor
+                    )
+                    .clickable {
+                        if (searchFocused) viewModel.exitClipboardSearch()
+                        else viewModel.enterClipboardSearch()
+                    }
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = subTextColor,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clickable { viewModel.setClipboardSearchFocused(false) }
+                    tint = if (searchFocused) accentColor else subTextColor,
+                    modifier = Modifier.size(16.dp)
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (searchQuery.isBlank()) tr(R.string.s_sousuotishi) else searchQuery,
+                    color = if (searchQuery.isBlank()) subTextColor else textColor,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                if (searchQuery.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = subTextColor,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable { viewModel.clearClipboardSearchQuery() }
+                    )
+                }
             }
         }
 
