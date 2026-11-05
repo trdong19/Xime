@@ -4,7 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,7 +40,6 @@ import androidx.compose.material.icons.twotone.Image
 import androidx.compose.material.icons.twotone.Sync
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -120,7 +119,8 @@ fun ClipboardView(
     var isMultiSelect by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var showClearConfirm by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    val searchFocused by viewModel.clipboardSearchFocused.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.clipboardSearchQuery.collectAsStateWithLifecycle()
 
     fun exitMultiSelect() {
         isMultiSelect = false
@@ -297,40 +297,30 @@ fun ClipboardView(
         }
         val shownQuickSend = if (!searching) quickSendItems else quickSendItems.filter { matchesSearch(it.text, queryLower) }
 
-        // 搜索框（增强搜索：子串 + 拼音全拼/首字母）
+        // 搜索栏：点按切换聚焦；聚焦时用下方键盘输入（子串 + 拼音全拼/首字母过滤）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(itemBgColor),
+                .background(if (searchFocused) accentColor.copy(alpha = 0.15f) else itemBgColor)
+                .clickable { viewModel.setClipboardSearchFocused(!searchFocused) }
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
-                tint = subTextColor,
-                modifier = Modifier
-                    .padding(start = 10.dp)
-                    .size(16.dp)
+                tint = if (searchFocused) accentColor else subTextColor,
+                modifier = Modifier.size(16.dp)
             )
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = textColor),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                decorationBox = { inner ->
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = tr(R.string.s_sousuo),
-                            style = LocalTextStyle.current.copy(fontSize = 13.sp, color = subTextColor)
-                        )
-                    }
-                    inner()
-                }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (searchQuery.isBlank()) tr(R.string.s_sousuotishi) else searchQuery,
+                color = if (searchQuery.isBlank()) subTextColor else textColor,
+                fontSize = 13.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
             )
             if (searchQuery.isNotEmpty()) {
                 Icon(
@@ -338,9 +328,8 @@ fun ClipboardView(
                     contentDescription = null,
                     tint = subTextColor,
                     modifier = Modifier
-                        .padding(end = 10.dp)
                         .size(16.dp)
-                        .clickable { searchQuery = "" }
+                        .clickable { viewModel.setClipboardSearchFocused(false) }
                 )
             }
         }

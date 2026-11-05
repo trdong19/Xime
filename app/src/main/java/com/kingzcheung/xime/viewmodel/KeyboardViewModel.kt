@@ -146,6 +146,24 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private val _candidatePageExpanded = MutableStateFlow(false)
     val candidatePageExpanded: StateFlow<Boolean> = _candidatePageExpanded.asStateFlow()
 
+    /** 剪贴板半屏面板搜索：聚焦时按键输入进搜索词（不进引擎/不上屏），半屏面板下直接用键盘打字 */
+    val clipboardSearchFocused = MutableStateFlow(false)
+    val clipboardSearchQuery = MutableStateFlow("")
+
+    /** 聚焦/退出搜索（退出时清空搜索词）。 */
+    fun setClipboardSearchFocused(focused: Boolean) {
+        clipboardSearchFocused.value = focused
+        if (!focused) clipboardSearchQuery.value = ""
+    }
+
+    fun appendClipboardSearch(text: String) {
+        clipboardSearchQuery.value += text
+    }
+
+    fun dropClipboardSearchLast() {
+        clipboardSearchQuery.value = clipboardSearchQuery.value.dropLast(1)
+    }
+
     /** 打开/收起候选展开页。 */
     fun setCandidatePageExpanded(expanded: Boolean) {
         _candidatePageExpanded.value = expanded
@@ -616,6 +634,8 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         val current = _page.value
         if (current is KeyboardPage.Overlay) {
             _page.value = current.behind
+            clipboardSearchFocused.value = false
+            clipboardSearchQuery.value = ""
             _syncViewState()
         }
     }

@@ -406,6 +406,51 @@ fun KeyboardView(
                 )
             }
 
+            // 半屏剪贴板面板：渲染在键盘上方扩展槽，键盘保持可见可交互
+            //（全屏覆盖分支对 Clipboard 路由已按 stackedClipboard 跳过）
+            if (page is KeyboardPage.Overlay && page.route is OverlayRoute.Clipboard &&
+                !state.isFloatingMode
+            ) {
+                ClipboardView(
+                    clipboardItems = state.clipboardItems,
+                    quickSendItems = state.quickSendItems,
+                    selectedTab = clipboardTab ?: 0,
+                    backgroundColor = keyboardBgColor,
+                    keyTextColor = keyTextColor,
+                    keyBgColor = keyBgColor,
+                    viewModel = viewModel,
+                    onSelectItem = { text ->
+                        callbacks.onClipboardSelect?.invoke(text)
+                        viewModel.closeOverlay()
+                    },
+                    onSelectImage = { item ->
+                        callbacks.onClipboardImageSelect?.invoke(item)
+                        viewModel.closeOverlay()
+                    },
+                    imageFileOf = { item -> viewModel.clipboardManager.imageFileOf(item) },
+                    onSplitWords = { text, _ -> viewModel.pushOverlay(OverlayRoute.SplitWords(text)) },
+                    onBack = { viewModel.closeOverlay() },
+                    onClipboardTabChange = { viewModel.pushOverlay(OverlayRoute.Clipboard(it)) },
+                    bottomPaddingDp = 0,
+                    modifier = Modifier.fillMaxWidth().height(280.dp),
+                    onQuickSendAddClick = {
+                        viewModel.closeOverlay()
+                        callbacks.onShowQuickSendForm?.invoke()
+                    },
+                    onQuickSendCreateFromText = { text ->
+                        viewModel.closeOverlay()
+                        callbacks.onQuickSendCreateFromText?.invoke(text)
+                    },
+                    onQuickSendEditItem = { id, text, code ->
+                        viewModel.closeOverlay()
+                        callbacks.onQuickSendEditItem?.invoke(id, text, code)
+                    },
+                    onPullRemote = callbacks.onClipboardPullRemote,
+                    pullRemoteAvailable = state.clipboardSyncEnabled,
+                    onDragSendStarted = callbacks.onHideKeyboard,
+                )
+            }
+
             // ACTIVE 输入面板在候选栏上方（需要 EditText 输入，保留候选栏可见）；
             // PASSIVE 纯展示面板走 Overlay 全屏（KeyboardView 底部 Overlay 分支渲染 InfoPanel）
             if (state.toolPanelVisible && state.toolPanelDisplay != "PASSIVE") {
@@ -1464,6 +1509,11 @@ fun KeyboardView(
         }
 
         if (page is KeyboardPage.Overlay) {
+            // 半屏模式：剪贴板面板渲染在键盘上方的扩展槽（见 QuickSendFormArea 槽位），
+            // 键盘/候选栏保持可见可交互——其它面板与浮窗模式维持全屏覆盖
+            val stackedClipboard = !state.isFloatingMode &&
+                page.route is OverlayRoute.Clipboard
+            if (!stackedClipboard) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1666,6 +1716,7 @@ fun KeyboardView(
             }
         }
         }
+            }
     }
 }
 }

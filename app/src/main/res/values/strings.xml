@@ -104,6 +104,7 @@
     <string name="s_huanxing">换行</string>
     <string name="s_qianwang">前往</string>
     <string name="s_sousuo">搜索</string>
+    <string name="s_sousuotishi">点我开始搜索（支持拼音首字母）</string>
     <string name="s_xiayixiang">下一项</string>
     <string name="s_wancheng">完成</string>
     <string name="s_zizaocikuaizhaoweishuaxin_xuxi_b6784">（自造词快照未刷新：需先唤起键盘一次）</string>

@@ -1632,7 +1632,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         hasControls = !state.toolPanelUiNodes.isNullOrEmpty(),
                     )
                 } else 0
-                val overlayPanelExtra = quickSendFormExtra + toolPanelExtra
+                // 剪贴板半屏面板撑高：面板 280dp 渲染在键盘上方扩展槽（KeyboardView 剪贴板槽位），
+                // 键盘保持完整可用；浮窗模式维持全屏覆盖不撑高
+                val pageNow = keyboardViewModel.page.value
+                val clipboardPanelExtra = if (pageNow is KeyboardPage.Overlay &&
+                    pageNow.route is OverlayRoute.Clipboard && !state.isFloatingMode
+                ) 280 else 0
+                val overlayPanelExtra = quickSendFormExtra + toolPanelExtra + clipboardPanelExtra
 
                 // 键盘内容高度 = 期望值 ∩ 宿主承载区预算。
                 // 独立 IME 面板（如 Horizon OS 悬浮面板）只给键盘一段区域，而 configuration
@@ -3175,6 +3181,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * 需在主线程调用。
      */
     internal fun commitTextSilently(text: String, isPaste: Boolean = false) {
+        // 剪贴板面板搜索聚焦：上屏文本进搜索词（不进输入框、不触发联想）。
+        // 覆盖中文选词/英文模式字母等所有上屏路径——半屏面板下直接用键盘打字搜索。
+        if (keyboardViewModel.clipboardSearchFocused.value) {
+            keyboardViewModel.appendClipboardSearch(text)
+            return
+        }
         // 会话日志：上屏文本（用于把按键序列与其最终结果对齐）
         KeyTapLogger.recordCommit(text, isPaste)
         if (uiState.value.quickSendFormFocused) {

@@ -93,6 +93,30 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         // 空键无任何按键语义，且下游 Rime 路由按 key[0] 取码（key.lowercase()[0]），
         // 空串会越界崩溃（2026-09-14 真机实证：滑动手势 commit 值为空时触发）。
         if (key.isEmpty()) return
+        // 剪贴板面板搜索聚焦：按键直接进搜索词（不进引擎、不上屏）。
+        // T9 数字键不经此路径——中文搜索走选词上屏被 commitTextSilently 拦截进搜索词。
+        if (service.keyboardViewModel.clipboardSearchFocused.value) {
+            when (key) {
+                "delete" -> {
+                    service.keyboardViewModel.dropClipboardSearchLast()
+                    return
+                }
+                "enter", "newline" -> {
+                    service.keyboardViewModel.setClipboardSearchFocused(false)
+                    return
+                }
+                "space" -> {
+                    service.keyboardViewModel.appendClipboardSearch(" ")
+                    return
+                }
+                else -> if (key.length == 1) {
+                    service.keyboardViewModel.appendClipboardSearch(
+                        if (isShifted) key.uppercase() else key
+                    )
+                    return
+                }
+            }
+        }
         if (service.uiState.value.toolPanelInputFocused) {
             val candState = service.candidateState.value
             val hasComposing = candState.isComposing || candState.inputText.isNotEmpty()
