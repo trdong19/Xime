@@ -90,6 +90,7 @@ import com.kingzcheung.xime.viewmodel.KeyboardUiState
 import com.kingzcheung.xime.viewmodel.KeyboardViewModel
 import com.kingzcheung.xime.association.AssociationService
 import com.kingzcheung.xime.clipboard.ClipboardManager
+import com.kingzcheung.xime.clipboard.db.ClipboardEntry
 import com.kingzcheung.xime.clipboard.sync.ClipboardSyncBridge
 import com.kingzcheung.xime.plugin.ActivePluginSelection
 import com.kingzcheung.xime.plugin.ExtensionManager
@@ -1632,12 +1633,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         hasControls = !state.toolPanelUiNodes.isNullOrEmpty(),
                     )
                 } else 0
-                // 剪贴板半屏面板撑高：面板 280dp 渲染在键盘上方扩展槽（KeyboardView 剪贴板槽位），
-                // 键盘保持完整可用；浮窗模式维持全屏覆盖不撑高
-                val pageNow = keyboardViewModel.page.value
-                val clipboardPanelExtra = if (pageNow is KeyboardPage.Overlay &&
-                    pageNow.route is OverlayRoute.Clipboard && !state.isFloatingMode
-                ) 280 else 0
+                // 剪贴板搜索条撑高（48dp 细条，键盘保持完整可用）
+                val clipboardPanelExtra = if (keyboardViewModel.clipboardSearchFocused.value) 48 else 0
                 val overlayPanelExtra = quickSendFormExtra + toolPanelExtra + clipboardPanelExtra
 
                 // 键盘内容高度 = 期望值 ∩ 宿主承载区预算。
@@ -3443,6 +3440,48 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     internal fun quickSendNativeMatches(codes: List<String>, engineCandidates: List<String>): List<String> =
         quickSendNativeMatchesAnnotated(codes, engineCandidates).map { it.first }
+
+    /** 剪贴板搜索匹配：子串（忽略大小写）+ 拼音全拼/首字母前缀 + 九键数字串（T9 惯例）。 */
+    internal fun clipboardSearchMatch(text: String, queryLower: String): Boolean {
+        if (queryLower.isEmpty()) return false
+        if (text.contains(queryLower, ignoreCase = true)) return true
+        // 纯数字查询：条目拼音转九键数字串比对（"ni hao"→"64426"，按 64 出「你好」开头的条目）
+        if (queryLower.length >= 2 && queryLower.all { it in '2'..'9' }) {
+            val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
+            val digitParts = py.split(' ').map { codeToT9Digits(it) }
+            if (digitParts.any { it == null }) return false
+            return digitParts.filterNotNull().joinToString("").startsWith(queryLower)
+        }
+        if (queryLower.none { it in 'a'..'z' }) return false
+        val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
+        if (py.replace(" ", "").startsWith(queryLower)) return true
+        val initials = py.split(' ').mapNotNull { it.firstOrNull()?.toString() }.joinToString("")
+        return initials.startsWith(queryLower)
+    }
+
+    /**
+     * 剪贴板搜索模式刷新：非组合态且搜索词非空时，候选栏整体替换为匹配条目
+     * （注释=触发编码/「剪贴板」；点选经 commitPluginCandidate 自动退出搜索并上屏）。
+     * 组合态（打字中）不覆盖——候选栏让位给正常拼音候选，选词上屏进搜索词。
+     */
+    internal fun refreshClipboardSearchCandidates() {
+        if (!keyboardViewModel.clipboardSearchFocused.value) return
+        val q = keyboardViewModel.clipboardSearchQuery.value.trim().lowercase()
+        val cs = candidateState.value
+        if (q.isEmpty() || cs.isComposing || cs.inputText.isNotEmpty() ||
+            cs.preeditText.isNotEmpty() || cs.pendingEnglishText.isNotEmpty()
+        ) return
+        val items = keyboardViewModel.viewState.value.clipboardItems
+            .filter { it.type != com.kingzcheung.xime.clipboard.db.ClipboardEntry.TYPE_IMAGE && clipboardSearchMatch(it.text, q) }
+            .take(20)
+        if (items.isEmpty()) return
+        candidateState.value = candidateState.value.copy(
+            candidates = items.map { it.text },
+            candidateComments = items.map { it.code.ifEmpty { "剪贴板" } },
+            candidateActions = items.map { CandidateAction.plugin(it.text) },
+            associationCandidates = emptyList()
+        )
+    }
 
     /**
      * 快捷发送候选（带注释）：注释 = 条目触发编码（无编码条目显示"快捷"），

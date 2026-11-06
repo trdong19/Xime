@@ -146,34 +146,21 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private val _candidatePageExpanded = MutableStateFlow(false)
     val candidatePageExpanded: StateFlow<Boolean> = _candidatePageExpanded.asStateFlow()
 
-    /** 剪贴板半屏面板搜索：聚焦时页面切回 Main（键盘正常渲染），面板走键盘上方扩展槽；
-     *  退出时恢复剪贴板 Overlay 页（正常高度全屏面板）。 */
+    /** 剪贴板半屏面板搜索：聚焦时按键输入进搜索词（不进引擎/不上屏），候选栏变为匹配结果 */
     val clipboardSearchFocused = MutableStateFlow(false)
     val clipboardSearchQuery = MutableStateFlow("")
-    val clipboardSearchTab = MutableStateFlow(0)
-    private var clipboardSearchReturnPage: KeyboardPage? = null
 
-    /** 进入搜索：记住当前剪贴板 Overlay 页（含页签），页面切回 Main 让键盘渲染。 */
+    /** 进入剪贴板搜索：关闭面板，回到主键盘；候选栏变为匹配结果，上方出现搜索条。 */
     fun enterClipboardSearch() {
-        val current = _page.value
-        if (current is KeyboardPage.Overlay && current.route is OverlayRoute.Clipboard) {
-            clipboardSearchReturnPage = current
-            clipboardSearchTab.value = current.route.tab
-            clipboardSearchFocused.value = true
-            _page.value = KeyboardPage.Main(MainType.FULL)
-            _syncViewState()
-        }
+        closeOverlay()
+        clipboardSearchFocused.value = true
+        clipboardSearchQuery.value = ""
     }
 
-    /** 退出搜索：清空搜索词，恢复剪贴板 Overlay 页（正常高度全屏面板）。 */
+    /** 退出搜索：清空搜索词与搜索条（候选栏随下次刷新恢复）。 */
     fun exitClipboardSearch() {
         clipboardSearchFocused.value = false
         clipboardSearchQuery.value = ""
-        clipboardSearchReturnPage?.let {
-            _page.value = it
-            _syncViewState()
-        }
-        clipboardSearchReturnPage = null
     }
 
     fun clearClipboardSearchQuery() {
@@ -664,7 +651,6 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
             _page.value = current.behind
             clipboardSearchFocused.value = false
             clipboardSearchQuery.value = ""
-            clipboardSearchReturnPage = null
             _syncViewState()
         }
     }

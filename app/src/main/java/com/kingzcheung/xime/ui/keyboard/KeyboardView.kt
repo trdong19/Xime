@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -158,6 +159,7 @@ fun KeyboardView(
             },
             onRightCommitUndone = callbacks.onT9RightCommitUndone,
             candidateTransform = callbacks.onTCandidateTransform,
+            onSearchDigit = { digit -> callbacks.onClipboardSearchDigit?.invoke(digit) == true },
         )
     }
     SideEffect { callbacks.onT9ControllerCreated?.invoke(t9Controller) }
@@ -406,49 +408,45 @@ fun KeyboardView(
                 )
             }
 
-            // 半屏剪贴板面板（搜索模式）：页面已切回 Main（键盘正常渲染），
-            // 面板渲染在键盘上方扩展槽；退出搜索恢复剪贴板 Overlay 页（正常高度全屏面板）
+            // 剪贴板搜索条（搜索模式）：打字即过滤剪贴板/常用语，匹配结果在候选栏；
+            // 点此条退出搜索。高度计入 service 的 overlayPanelExtra（48dp）
             val clipboardSearchFocused = viewModel.clipboardSearchFocused.collectAsStateWithLifecycle().value
+            val clipboardSearchQuery = viewModel.clipboardSearchQuery.collectAsStateWithLifecycle().value
             if (clipboardSearchFocused) {
-                ClipboardView(
-                    clipboardItems = state.clipboardItems,
-                    quickSendItems = state.quickSendItems,
-                    selectedTab = viewModel.clipboardSearchTab.value,
-                    backgroundColor = keyboardBgColor,
-                    keyTextColor = keyTextColor,
-                    keyBgColor = keyBgColor,
-                    viewModel = viewModel,
-                    showSearch = !isLandscape,
-                    onSelectItem = { text ->
-                        callbacks.onClipboardSelect?.invoke(text)
-                        viewModel.closeOverlay()
-                    },
-                    onSelectImage = { item ->
-                        callbacks.onClipboardImageSelect?.invoke(item)
-                        viewModel.closeOverlay()
-                    },
-                    imageFileOf = { item -> viewModel.clipboardManager.imageFileOf(item) },
-                    onSplitWords = { text, _ -> viewModel.pushOverlay(OverlayRoute.SplitWords(text)) },
-                    onBack = { viewModel.exitClipboardSearch() },
-                    onClipboardTabChange = { viewModel.setClipboardSearchTab(it) },
-                    bottomPaddingDp = 0,
-                    modifier = Modifier.fillMaxWidth().height(if (isLandscape) 160.dp else 280.dp),
-                    onQuickSendAddClick = {
-                        viewModel.closeOverlay()
-                        callbacks.onShowQuickSendForm?.invoke()
-                    },
-                    onQuickSendCreateFromText = { text ->
-                        viewModel.closeOverlay()
-                        callbacks.onQuickSendCreateFromText?.invoke(text)
-                    },
-                    onQuickSendEditItem = { id, text, code ->
-                        viewModel.closeOverlay()
-                        callbacks.onQuickSendEditItem?.invoke(id, text, code)
-                    },
-                    onPullRemote = callbacks.onClipboardPullRemote,
-                    pullRemoteAvailable = state.clipboardSyncEnabled,
-                    onDragSendStarted = callbacks.onHideKeyboard,
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                        .clickable { viewModel.exitClipboardSearch() }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (clipboardSearchQuery.isBlank()) "搜索剪贴板：直接打字，点候选上屏（点此退出）"
+                        else "搜索中：$clipboardSearchQuery（点此退出）",
+                        fontSize = 12.sp,
+                        color = keyTextColor.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = keyTextColor.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable { viewModel.exitClipboardSearch() }
+                    )
+                }
             }
 
             // ACTIVE 输入面板在候选栏上方（需要 EditText 输入，保留候选栏可见）；

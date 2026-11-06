@@ -407,6 +407,14 @@ internal fun rememberImeKeyboardCallbacks(
             onT9ControllerCreated = { controller ->
                 service.t9InputControllerRef = controller
             },
+            onClipboardSearchDigit = { digit ->
+                val focused = service.keyboardViewModel.clipboardSearchFocused.value
+                if (focused) {
+                    service.keyboardViewModel.appendClipboardSearch(digit)
+                    service.refreshClipboardSearchCandidates()
+                }
+                focused
+            },
             onBackspaceSweepDeleteStep = {
                 service.onBackspaceSweepDeleteStep()
             },
