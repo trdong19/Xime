@@ -3471,8 +3471,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (q.isEmpty() || cs.isComposing || cs.inputText.isNotEmpty() ||
             cs.preeditText.isNotEmpty() || cs.pendingEnglishText.isNotEmpty()
         ) return
-        val items = keyboardViewModel.viewState.value.clipboardItems
-            .filter { it.type != com.kingzcheung.xime.clipboard.db.ClipboardEntry.TYPE_IMAGE && clipboardSearchMatch(it.text, q) }
+        val items = (clipboardItemsState.value + quickSendItemsState.value)
+            .filter { it.type != ClipboardEntry.TYPE_IMAGE && clipboardSearchMatch(it.text, q) }
+            .distinctBy { it.text }
             .take(20)
         if (items.isEmpty()) return
         candidateState.value = candidateState.value.copy(
