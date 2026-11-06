@@ -175,10 +175,6 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         clipboardSearchQuery.value = clipboardSearchQuery.value.dropLast(1)
     }
 
-    fun setClipboardSearchTab(tab: Int) {
-        clipboardSearchTab.value = tab
-    }
-
     /** 打开/收起候选展开页。 */
     fun setCandidatePageExpanded(expanded: Boolean) {
         _candidatePageExpanded.value = expanded
