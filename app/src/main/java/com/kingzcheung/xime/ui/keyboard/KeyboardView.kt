@@ -23,9 +23,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -47,6 +51,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -139,6 +144,7 @@ fun KeyboardView(
         }
     }
     val viewState by viewModel.viewState.collectAsStateWithLifecycle()
+    val clipboardSearchFocused = viewModel.clipboardSearchFocused.collectAsStateWithLifecycle().value
     val isLandscape = if (state.isFloatingMode) false
         else LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -272,6 +278,8 @@ fun KeyboardView(
 
     val contentModifier = if (state.isFloatingMode) {
         modifier.keyboardBackground(themeScheme.keyboardBackground, state.isDarkTheme, keyboardBgColor)
+            // 剪贴板搜索模式：卡片 70% 透明（可透见后方搜索界面/app 内容）
+            .alpha(if (clipboardSearchFocused) 0.3f else 1f)
     } else {
         // 非浮动模式：渐变背景由 XimeInputMethodService 外层 Box 统一绘制（含导航栏区，
         // 保证延伸到屏幕底部时渐变连续），此处不再叠加第二层背景。
@@ -1695,4 +1703,119 @@ private fun KeyboardViewModel.consumeShiftKey(key: String): Boolean = when (key)
         doubleTapShift(); true
     }
     else -> false
+}
+
+/**
+ * 剪贴板搜索界面（浮窗键盘形态）：顶部搜索词框 + 下方匹配结果大列表。
+ * 输入来自浮窗键盘路由（搜索聚焦时打字/选词进搜索词）；结果由 service 的
+ * refreshClipboardSearchCandidates 刷进 clipboardSearchResults 后传入。
+ * 点结果上屏并退出搜索（onSelect 由服务层接线：exit + selectClipboardItem）。
+ */
+@Composable
+internal fun ClipboardSearchView(
+    query: String,
+    results: List<Pair<String, String>>,
+    onExit: () -> Unit,
+    onClear: () -> Unit,
+    onSelect: (String) -> Unit,
+    backgroundColor: Color,
+    itemBgColor: Color,
+    textColor: Color,
+    subTextColor: Color,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(itemBgColor)
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (query.isBlank()) "输入关键词搜索剪贴板/常用语" else query,
+                color = if (query.isBlank()) subTextColor else textColor,
+                fontSize = 14.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            if (query.isNotEmpty()) {
+                Text(
+                    text = "清空",
+                    color = accentColor,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .clickable(onClick = onClear)
+                        .padding(start = 8.dp)
+                )
+            }
+            Text(
+                text = "退出",
+                color = subTextColor,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clickable(onClick = onExit)
+                    .padding(start = 10.dp)
+            )
+        }
+        if (results.isEmpty()) {
+            Text(
+                text = "无匹配结果",
+                color = subTextColor,
+                fontSize = 13.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)
+            )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 12.dp, vertical = 4.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(results) { (text, comment) ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(itemBgColor)
+                            .clickable { onSelect(text) }
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = text,
+                            color = textColor,
+                            fontSize = 14.sp,
+                            maxLines = 2
+                        )
+                        if (comment.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = comment,
+                                color = subTextColor,
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

@@ -142,6 +142,30 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private val _page = MutableStateFlow<KeyboardPage>(KeyboardPage.Main(MainType.FULL))
     val page: StateFlow<KeyboardPage> = _page.asStateFlow()
 
+    /** 剪贴板搜索（浮窗键盘形态）：聚焦时打字进搜索词，结果在搜索界面大列表 */
+    val clipboardSearchFocused = MutableStateFlow(false)
+    val clipboardSearchQuery = MutableStateFlow("")
+    val clipboardSearchResults = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+
+    fun exitClipboardSearch() {
+        clipboardSearchFocused.value = false
+        clipboardSearchQuery.value = ""
+        clipboardSearchResults.value = emptyList()
+    }
+
+    fun appendClipboardSearch(text: String) {
+        clipboardSearchQuery.value += text
+    }
+
+    fun dropClipboardSearchLast() {
+        clipboardSearchQuery.value = clipboardSearchQuery.value.dropLast(1)
+    }
+
+    fun clearClipboardSearchQuery() {
+        clipboardSearchQuery.value = ""
+        clipboardSearchResults.value = emptyList()
+    }
+
     /** 候选展开页：候选栏的在位展开态（非 Overlay——顶部保持真实候选栏，实时跟随编码/删除）。 */
     private val _candidatePageExpanded = MutableStateFlow(false)
     val candidatePageExpanded: StateFlow<Boolean> = _candidatePageExpanded.asStateFlow()

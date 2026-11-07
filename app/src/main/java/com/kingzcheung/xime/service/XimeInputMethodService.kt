@@ -1855,6 +1855,27 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             val callbacks = rememberImeKeyboardCallbacks(this@XimeInputMethodService, floatingMinY)
                             keyboardCallbacks = callbacks
                             val hapticView = LocalView.current
+                            // 剪贴板搜索界面（浮窗键盘形态）：底层渲染（浮窗卡片在上层可拖动）
+                            if (keyboardViewModel.clipboardSearchFocused.value) {
+                                ClipboardSearchView(
+                                    query = keyboardViewModel.clipboardSearchQuery.collectAsState().value,
+                                    results = keyboardViewModel.clipboardSearchResults.collectAsState().value,
+                                    onExit = { exitClipboardSearch() },
+                                    onClear = { keyboardViewModel.clearClipboardSearchQuery() },
+                                    onSelect = { text ->
+                                        exitClipboardSearch()
+                                        textCommit.selectClipboardItem(text)
+                                    },
+                                    backgroundColor = Color.Transparent,
+                                    itemBgColor = cardBg,
+                                    textColor = candidateTextCol,
+                                    subTextColor = candidateTextCol.copy(alpha = 0.6f),
+                                    accentColor = accentCol,
+                                    modifier = Modifier.align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .height((effectiveKeyboardHeight + 60).dp),
+                                )
+                            }
                             KeyboardView(
                                 viewModel = keyboardViewModel,
                                 state = kbState,
@@ -2806,6 +2827,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         super.onWindowHidden()
         clearInputState()
         recentClipboardItemsState.value = emptyList()
+        // 键盘隐藏时自动退出剪贴板搜索（否则下次弹出仍是搜索态）
+        keyboardViewModel.exitClipboardSearch()
         // 键盘隐藏时重置快捷发送表单临时态：表单开启状态下直接隐藏键盘（未走 onClose）
         // 会把 showQuickSendForm 残留到下次弹窗，候选栏上方渲染出残留表单背景造成遮挡；
         // 回车键文案也需一并还原（打开表单时被改为"确定"）。
@@ -3175,8 +3198,50 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * [isPaste] 标记粘贴性质上屏，透传到 text_committed payload（见 commitPastedText）。
      * 需在主线程调用。
      */
+    // ── 剪贴板搜索（浮窗键盘形态）────────────────────────────
+    // 面板点搜索 → 切浮窗卡片（70% 透明可拖动）+ 底部搜索界面（搜索框+结果列表）；
+    // 打字进搜索词（九键打拼音选词经 commitTextSilently 拦截 / 26键字母经路由分支拦截），
+    // 点结果上屏并退出。浮窗的全屏透明窗口让"搜索界面+键盘"天然同屏（渲染互斥不复存在）。
+
+    private var searchRestoreFloating = false
+
+    internal fun enterClipboardSearch() {
+        if (isHostConstrained()) {
+            android.widget.Toast.makeText(
+                this,
+                tr(R.string.s_dangqianxianshiquyubuzhichifud_d72e1),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        keyboardViewModel.enterClipboardSearch()
+        // 切浮窗卡片形态（记忆原状态，退出搜索时恢复）
+        if (!uiState.value.isFloatingMode) {
+            searchRestoreFloating = true
+            schemaController.toggleFloatingMode(true)
+        }
+        mainHandler.post {
+            runCatching { currentInputConnection?.finishComposingText() }
+            endComposingInputBox()
+            updateUI()
+        }
+    }
+
+    internal fun exitClipboardSearch() {
+        keyboardViewModel.exitClipboardSearch()
+        if (searchRestoreFloating) {
+            searchRestoreFloating = false
+            schemaController.toggleFloatingMode(false)
+        }
+    }
+
     internal fun commitTextSilently(text: String, isPaste: Boolean = false) {
-        // 会话日志：上屏文本（用于把按键序列与其最终结果对齐）
+        // 剪贴板搜索聚焦：上屏文本进搜索词（不进输入框、不触发联想）
+        if (keyboardViewModel.clipboardSearchFocused.value) {
+            keyboardViewModel.appendClipboardSearch(text)
+            refreshClipboardSearchCandidates()
+            return
+        }
         KeyTapLogger.recordCommit(text, isPaste)
         if (uiState.value.quickSendFormFocused) {
             // 焦点在触发编码输入框时路由到编码框，否则路由到快捷发送文本框
@@ -3432,6 +3497,46 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     internal fun quickSendNativeMatches(codes: List<String>, engineCandidates: List<String>): List<String> =
         quickSendNativeMatchesAnnotated(codes, engineCandidates).map { it.first }
+
+    /** 剪贴板搜索匹配：子串（忽略大小写）+ 拼音全拼/首字母前缀 + 九键数字串（T9 惯例）。 */
+    internal fun clipboardSearchMatch(text: String, queryLower: String): Boolean {
+        if (queryLower.isEmpty()) return false
+        if (text.contains(queryLower, ignoreCase = true)) return true
+        // 纯数字查询：条目拼音转九键数字串比对（"ni hao"→"64426"，按 64 出「你好」开头的条目）
+        if (queryLower.length >= 2 && queryLower.all { it in '2'..'9' }) {
+            val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
+            val digitParts = py.split(' ').map { codeToT9Digits(it) }
+            if (digitParts.any { it == null }) return false
+            return digitParts.filterNotNull().joinToString("").startsWith(queryLower)
+        }
+        if (queryLower.none { it in 'a'..'z' }) return false
+        val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
+        if (py.replace(" ", "").startsWith(queryLower)) return true
+        val initials = py.split(' ').mapNotNull { it.firstOrNull()?.toString() }.joinToString("")
+        return initials.startsWith(queryLower)
+    }
+
+    /**
+     * 剪贴板搜索模式刷新：按搜索词过滤剪贴板+常用语，结果写入
+     * keyboardViewModel.clipboardSearchResults（只供搜索界面大列表展示）。
+     * 不写候选栏——候选栏在搜索时保留正常打字候选（选词进搜索词）。
+     */
+    internal fun refreshClipboardSearchCandidates() {
+        if (!keyboardViewModel.clipboardSearchFocused.value) return
+        val q = keyboardViewModel.clipboardSearchQuery.value.trim().lowercase()
+        val results = if (q.isEmpty()) emptyList() else
+            (clipboardItemsState.value + quickSendItemsState.value)
+                .filter { it.type != ClipboardEntry.TYPE_IMAGE && clipboardSearchMatch(it.text, q) }
+                .distinctBy { it.text }
+                .take(20)
+        val timeFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+        keyboardViewModel.clipboardSearchResults.value = results.map {
+            it.text to listOf(
+                it.code.takeIf { c -> c.isNotEmpty() },
+                timeFmt.format(java.util.Date(it.timestamp))
+            ).filterNotNull().joinToString(" · ")
+        }
+    }
 
     /**
      * 快捷发送候选（带注释）：注释 = 条目触发编码（无编码条目显示"快捷"），
