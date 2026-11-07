@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.StarBorder
@@ -98,6 +99,8 @@ fun ClipboardView(
     onQuickSendEditItem: ((Long, String, String) -> Unit)? = null,
     /** 剪贴板条目"存为常用语"：打开快捷发送表单并预填内容。 */
     onQuickSendCreateFromText: ((String) -> Unit)? = null,
+    /** 搜索入口：点按进入独立搜索界面（浮窗键盘打字过滤）。 */
+    onSearchActivate: (() -> Unit)? = null,
     onPullRemote: (() -> Unit)? = null,
     pullRemoteAvailable: Boolean = false,
     /** 图片条目点选（直插/回写由服务层处理）。 */
@@ -286,6 +289,32 @@ fun ClipboardView(
                     )
                 }
             }
+        }
+
+        // 搜索入口：点按进入独立搜索界面（浮窗键盘打字，实时过滤剪贴板/常用语）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(itemBgColor)
+                .clickable { onSearchActivate?.invoke() }
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = subTextColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = tr(R.string.s_sousuotishi),
+                color = subTextColor,
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f)
+            )
         }
 
         val pagerState = rememberPagerState(
