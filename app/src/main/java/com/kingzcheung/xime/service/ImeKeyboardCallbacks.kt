@@ -407,6 +407,15 @@ internal fun rememberImeKeyboardCallbacks(
             onT9ControllerCreated = { controller ->
                 service.t9InputControllerRef = controller
             },
+            onClipboardSearchActivate = {
+                // 进入搜索：清掉输入框残留组合区（结果上屏才不会落错位、光标才在内容后）
+                service.keyboardViewModel.enterClipboardSearch()
+                service.mainHandler.post {
+                    runCatching { service.currentInputConnection?.finishComposingText() }
+                    service.endComposingInputBox()
+                    service.updateUI()
+                }
+            },
             onBackspaceSweepDeleteStep = {
                 service.onBackspaceSweepDeleteStep()
             },

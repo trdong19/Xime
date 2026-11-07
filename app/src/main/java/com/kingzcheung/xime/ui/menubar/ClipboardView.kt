@@ -100,6 +100,8 @@ fun ClipboardView(
     onQuickSendEditItem: ((Long, String, String) -> Unit)? = null,
     /** 是否显示搜索栏（横屏半屏面板不显示，避免撑高触发收起）。 */
     showSearch: Boolean = true,
+    /** 搜索栏点击：进入独立搜索界面（清组合区+撑高+键盘渲染）。 */
+    onSearchActivate: (() -> Unit)? = null,
     /** 剪贴板条目"存为常用语"：打开快捷发送表单并预填内容。 */
     onQuickSendCreateFromText: ((String) -> Unit)? = null,
     onPullRemote: (() -> Unit)? = null,
@@ -316,7 +318,7 @@ fun ClipboardView(
                     )
                     .clickable {
                         if (searchFocused) viewModel.exitClipboardSearch()
-                        else viewModel.enterClipboardSearch()
+                        else onSearchActivate?.invoke()
                     }
                     .padding(horizontal = 10.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically

@@ -149,6 +149,8 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     /** 剪贴板半屏面板搜索：聚焦时按键输入进搜索词（不进引擎/不上屏），候选栏变为匹配结果 */
     val clipboardSearchFocused = MutableStateFlow(false)
     val clipboardSearchQuery = MutableStateFlow("")
+    /** 搜索匹配结果（text to 注释），只供搜索界面展示——不进候选栏（候选栏保留正常打字候选） */
+    val clipboardSearchResults = MutableStateFlow<List<Pair<String, String>>>(emptyList())
 
     /** 进入剪贴板搜索：关闭面板，回到主键盘；候选栏变为匹配结果，上方出现搜索条。 */
     fun enterClipboardSearch() {

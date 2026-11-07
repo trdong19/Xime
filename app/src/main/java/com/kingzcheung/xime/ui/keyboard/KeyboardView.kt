@@ -144,6 +144,7 @@ fun KeyboardView(
         }
     }
     val viewState by viewModel.viewState.collectAsStateWithLifecycle()
+    val clipboardSearchResults by viewModel.clipboardSearchResults.collectAsStateWithLifecycle()
     val isLandscape = if (state.isFloatingMode) false
         else LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -413,12 +414,12 @@ fun KeyboardView(
                 )
             }
 
-            // 剪贴板搜索界面（搜索模式）：搜索框 + 结果大列表（结果由 service 刷新进候选栏数据，
-            // 候选栏本体收空避免与打字候选冲突）；点结果上屏并退出搜索
+            // 剪贴板搜索界面（搜索模式）：搜索框 + 结果大列表（结果来自
+            // keyboardViewModel.clipboardSearchResults，与候选栏数据完全分离）；点结果上屏并退出搜索
             if (clipboardSearchFocused) {
                 ClipboardSearchView(
                     query = clipboardSearchQuery,
-                    results = candidateState.value.candidates.zip(candidateState.value.candidateComments),
+                    results = clipboardSearchResults,
                     onExit = { viewModel.exitClipboardSearch() },
                     onClear = { viewModel.clearClipboardSearchQuery() },
                     onSelect = { text ->
@@ -1564,10 +1565,11 @@ fun KeyboardView(
                         },
                         imageFileOf = { item -> viewModel.clipboardManager.imageFileOf(item) },
                         onSplitWords = { text, _ -> viewModel.pushOverlay(OverlayRoute.SplitWords(text)) },
-                        onBack = { viewModel.closeOverlay() },
-                        onClipboardTabChange = { viewModel.pushOverlay(OverlayRoute.Clipboard(it)) },
-                        bottomPaddingDp = state.keyboardBottomPaddingDp,
-                        modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                    onBack = { viewModel.closeOverlay() },
+                    onClipboardTabChange = { viewModel.pushOverlay(OverlayRoute.Clipboard(it)) },
+                    onSearchActivate = { callbacks.onClipboardSearchActivate?.invoke() },
+                    bottomPaddingDp = state.keyboardBottomPaddingDp,
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                         onQuickSendAddClick = {
                             viewModel.closeOverlay()
                             callbacks.onShowQuickSendForm?.invoke()

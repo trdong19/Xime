@@ -3466,34 +3466,25 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     /**
-     * 剪贴板搜索模式刷新：非组合态且搜索词非空时，候选栏整体替换为匹配条目
-     * （注释=触发编码/「剪贴板」；点选经 commitPluginCandidate 自动退出搜索并上屏）。
-     * 组合态（打字中）不覆盖——候选栏让位给正常拼音候选，选词上屏进搜索词。
+     * 剪贴板搜索模式刷新：按搜索词过滤剪贴板+常用语，结果写入
+     * keyboardViewModel.clipboardSearchResults（只供搜索界面大列表展示）。
+     * 不写候选栏——候选栏在搜索时保留正常打字候选（选词进搜索词）。
      */
     internal fun refreshClipboardSearchCandidates() {
         if (!keyboardViewModel.clipboardSearchFocused.value) return
         val q = keyboardViewModel.clipboardSearchQuery.value.trim().lowercase()
-        val cs = candidateState.value
-        if (q.isEmpty() || cs.isComposing || cs.inputText.isNotEmpty() ||
-            cs.preeditText.isNotEmpty() || cs.pendingEnglishText.isNotEmpty()
-        ) return
-        val items = (clipboardItemsState.value + quickSendItemsState.value)
-            .filter { it.type != ClipboardEntry.TYPE_IMAGE && clipboardSearchMatch(it.text, q) }
-            .distinctBy { it.text }
-            .take(20)
-        if (items.isEmpty()) return
+        val results = if (q.isEmpty()) emptyList() else
+            (clipboardItemsState.value + quickSendItemsState.value)
+                .filter { it.type != ClipboardEntry.TYPE_IMAGE && clipboardSearchMatch(it.text, q) }
+                .distinctBy { it.text }
+                .take(20)
         val timeFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        candidateState.value = candidateState.value.copy(
-            candidates = items.map { it.text },
-            candidateComments = items.map {
-                listOf(
-                    it.code.takeIf { c -> c.isNotEmpty() },
-                    timeFmt.format(java.util.Date(it.timestamp))
-                ).filterNotNull().joinToString(" · ")
-            },
-            candidateActions = items.map { CandidateAction.plugin(it.text) },
-            associationCandidates = emptyList()
-        )
+        keyboardViewModel.clipboardSearchResults.value = results.map {
+            it.text to listOf(
+                it.code.takeIf { c -> c.isNotEmpty() },
+                timeFmt.format(java.util.Date(it.timestamp))
+            ).filterNotNull().joinToString(" · ")
+        }
     }
 
     /**
