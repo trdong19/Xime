@@ -1633,8 +1633,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         hasControls = !state.toolPanelUiNodes.isNullOrEmpty(),
                     )
                 } else 0
-                // 剪贴板搜索条撑高（48dp 细条，键盘保持完整可用）
-                val clipboardPanelExtra = if (keyboardViewModel.clipboardSearchFocused.value) 48 else 0
+                // 剪贴板搜索界面撑高（320dp：搜索框+结果列表，键盘保持完整可用）
+                val clipboardPanelExtra = if (keyboardViewModel.clipboardSearchFocused.value) 320 else 0
                 val overlayPanelExtra = quickSendFormExtra + toolPanelExtra + clipboardPanelExtra
 
                 // 键盘内容高度 = 期望值 ∩ 宿主承载区预算。
