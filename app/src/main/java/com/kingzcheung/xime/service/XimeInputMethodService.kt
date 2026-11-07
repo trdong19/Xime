@@ -1633,8 +1633,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         hasControls = !state.toolPanelUiNodes.isNullOrEmpty(),
                     )
                 } else 0
-                // 剪贴板搜索界面撑高（320dp：搜索框+结果列表，键盘保持完整可用）
-                val clipboardPanelExtra = if (keyboardViewModel.clipboardSearchFocused.value) 320 else 0
+                // 剪贴板搜索界面撑高（竖屏 280dp / 横屏 160dp 矮版，键盘保持完整可用）
+                val isLandscapeHeight = resources.configuration.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                val clipboardPanelExtra = if (keyboardViewModel.clipboardSearchFocused.value) {
+                    if (isLandscapeHeight) 160 else 280
+                } else 0
                 val overlayPanelExtra = quickSendFormExtra + toolPanelExtra + clipboardPanelExtra
 
                 // 键盘内容高度 = 期望值 ∩ 宿主承载区预算。
@@ -2808,6 +2812,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         super.onWindowHidden()
         clearInputState()
         recentClipboardItemsState.value = emptyList()
+        // 键盘隐藏时自动退出剪贴板搜索（否则下次弹出仍是搜索态）
+        keyboardViewModel.exitClipboardSearch()
         // 键盘隐藏时重置快捷发送表单临时态：表单开启状态下直接隐藏键盘（未走 onClose）
         // 会把 showQuickSendForm 残留到下次弹窗，候选栏上方渲染出残留表单背景造成遮挡；
         // 回车键文案也需一并还原（打开表单时被改为"确定"）。
@@ -3476,9 +3482,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             .distinctBy { it.text }
             .take(20)
         if (items.isEmpty()) return
+        val timeFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
         candidateState.value = candidateState.value.copy(
             candidates = items.map { it.text },
-            candidateComments = items.map { it.code.ifEmpty { "剪贴板" } },
+            candidateComments = items.map {
+                listOf(
+                    it.code.takeIf { c -> c.isNotEmpty() },
+                    timeFmt.format(java.util.Date(it.timestamp))
+                ).filterNotNull().joinToString(" · ")
+            },
             candidateActions = items.map { CandidateAction.plugin(it.text) },
             associationCandidates = emptyList()
         )

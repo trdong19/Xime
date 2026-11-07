@@ -118,6 +118,9 @@ fun ClipboardView(
         0.35f
     )
     var menuAnchor by remember { mutableStateOf<MenuAnchor?>(null) }
+    val clipboardTimeFormat = remember {
+        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+    }
     var isMultiSelect by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -746,11 +749,12 @@ fun ClipboardTabContent(
                         bgColor = itemBgColor,
                         textColor = textColor,
                         accentColor = accentColor,
-                        modifier = Modifier.height(62.dp),
+                        modifier = Modifier.height(70.dp),
                         onClick = onClick,
                         onLongClick = onLongClick,
                         dragKey = item.id,
                         onStartDrag = onStartDrag,
+                        timeText = clipboardTimeFormat.format(java.util.Date(item.timestamp)),
                     )
                 }
             }
@@ -852,6 +856,7 @@ fun GridItemCard(
     onLongClick: () -> Unit,
     dragKey: Any? = null,
     onStartDrag: (() -> Boolean)? = null,
+    timeText: String = "",
 ) {
     val shape = RoundedCornerShape(8.dp)
     val bg = if (highlighted) accentColor.copy(alpha = 0.18f) else bgColor
@@ -874,7 +879,7 @@ fun GridItemCard(
                 onStartDrag = onStartDrag ?: { false },
             )
             .padding(horizontal = 10.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             text = text,
@@ -884,6 +889,15 @@ fun GridItemCard(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
+        if (timeText.isNotEmpty()) {
+            Text(
+                text = timeText,
+                color = textColor.copy(alpha = 0.55f),
+                fontSize = 9.sp,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
     }
 }
 

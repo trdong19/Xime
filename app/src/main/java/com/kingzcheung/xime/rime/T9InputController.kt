@@ -47,8 +47,6 @@ class T9InputController(
      *  与引擎候选注释覆盖（按候选文本匹配，供 applyComposition T9 分支回填
      *  显示注释）。null = 不干预。 */
     private val candidateTransform: ((RimeProcessResult) -> com.kingzcheung.xime.service.T9TransformOutcome?)? = null,
-    /** 剪贴板搜索模式拦截：返回 true = 该数字已进搜索词，控制器不处理。 */
-    val onSearchDigit: ((String) -> Boolean)? = null,
 ) {
     companion object {
         private const val TAG = "T9InputController"
@@ -318,8 +316,6 @@ class T9InputController(
     }
 
     fun onDigitPressed(digit: String) {
-        // 剪贴板搜索模式：九键数字进搜索词（T9 惯例——数字串匹配条目拼音），不进引擎
-        if (onSearchDigit?.invoke(digit) == true) return
         val code = digit[0].code
         enqueue {
             rimeEngine.processKey(code, 0)

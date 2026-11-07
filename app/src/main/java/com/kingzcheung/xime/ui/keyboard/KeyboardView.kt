@@ -163,7 +163,6 @@ fun KeyboardView(
             },
             onRightCommitUndone = callbacks.onT9RightCommitUndone,
             candidateTransform = callbacks.onTCandidateTransform,
-            onSearchDigit = { digit -> callbacks.onClipboardSearchDigit?.invoke(digit) == true },
         )
     }
     SideEffect { callbacks.onT9ControllerCreated?.invoke(t9Controller) }
@@ -349,12 +348,8 @@ fun KeyboardView(
                 cs.candidates, cs.candidateComments, cs.inputText, cs.preeditText, cs.isComposing,
                 cs.associationCandidates, cs.pendingEnglishText, cs.isShowingRecentClipboard, cs.hasNextPage,
                 state.isCalculatorMode, handwritingCandidates, handwritingComments, showHandwritingCandidates,
-                railExpanded, cs.preeditCaretPos, state.recentClipboardItems, clipboardSearchFocused,
+                railExpanded, cs.preeditCaretPos, state.recentClipboardItems,
             ) {
-                // 剪贴板搜索模式：候选栏收空（结果在上方搜索界面的大列表里，避免占用候选栏）
-                if (clipboardSearchFocused) {
-                    return@remember CandidateBarState.Idle
-                }
                 if (showHandwritingCandidates) {
                     CandidateBarState.AssociationOnly(
                         candidates = handwritingCandidates,
@@ -435,7 +430,7 @@ fun KeyboardView(
                     textColor = keyTextColor,
                     subTextColor = keyTextColor.copy(alpha = 0.65f),
                     accentColor = accentColor,
-                    modifier = Modifier.fillMaxWidth().height(320.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (isLandscape) 160.dp else 280.dp),
                 )
             }
 
