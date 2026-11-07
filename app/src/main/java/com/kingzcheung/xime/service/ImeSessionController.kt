@@ -234,9 +234,6 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 service.endComposingInputBox()
             }
         }
-
-        // 剪贴板搜索模式：非组合态且搜索词非空 → 候选栏替换为匹配结果（见 refreshClipboardSearchCandidates）
-        service.refreshClipboardSearchCandidates()
     }
 
     /** 在输入框模式向编辑器写入编码文本。 */

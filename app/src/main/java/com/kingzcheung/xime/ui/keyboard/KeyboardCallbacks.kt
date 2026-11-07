@@ -111,8 +111,6 @@ data class KeyboardCallbacks(
      * （回车等需要等待其后台队列排空的路径经由服务层持有引用）。
      */
     var onT9ControllerCreated: ((com.kingzcheung.xime.rime.T9InputController) -> Unit)? = null,
-    /** 剪贴板搜索进入：清理输入框残留组合区并初始化搜索状态（面板搜索栏点击）。 */
-    val onClipboardSearchActivate: (() -> Unit)? = null,
     /**
      * T9 候选词过滤器。服务层在获取 RIME 候选词后调用，由键盘层根据
      * [com.kingzcheung.xime.rime.T9InputController.selectionHistory] 过滤不匹配的候选词。

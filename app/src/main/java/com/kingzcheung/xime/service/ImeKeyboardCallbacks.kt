@@ -121,20 +121,10 @@ internal fun rememberImeKeyboardCallbacks(
             },
             onToggleDarkMode = { service.toggleDarkMode() },
             onClipboard = {},
-            onClipboardSelect = { text ->
-                // 点选条目上屏前先退出搜索模式（避免上屏内容被拦进搜索词）
-                service.keyboardViewModel.exitClipboardSearch()
-                service.textCommit.selectClipboardItem(text)
-            },
-            onClipboardImageSelect = { item ->
-                service.keyboardViewModel.exitClipboardSearch()
-                service.textCommit.selectClipboardImage(item)
-            },
+            onClipboardSelect = { text -> service.textCommit.selectClipboardItem(text) },
+            onClipboardImageSelect = { item -> service.textCommit.selectClipboardImage(item) },
             onClipboardPullRemote = { service.clipboardSyncBridge?.pullOnce() },
-            onCommitText = { text ->
-                service.keyboardViewModel.exitClipboardSearch()
-                service.textCommit.commitClipboardText(text)
-            },
+            onCommitText = { text -> service.textCommit.commitClipboardText(text) },
             onDeleteText = { count -> service.textCommit.deleteClipboardChars(count) },
             onHandwritingAutoCommit = { newTail, expectedTail ->
                 if (expectedTail.isEmpty()) {
@@ -406,15 +396,6 @@ internal fun rememberImeKeyboardCallbacks(
             },
             onT9ControllerCreated = { controller ->
                 service.t9InputControllerRef = controller
-            },
-            onClipboardSearchActivate = {
-                // 进入搜索：清掉输入框残留组合区（结果上屏才不会落错位、光标才在内容后）
-                service.keyboardViewModel.enterClipboardSearch()
-                service.mainHandler.post {
-                    runCatching { service.currentInputConnection?.finishComposingText() }
-                    service.endComposingInputBox()
-                    service.updateUI()
-                }
             },
             onBackspaceSweepDeleteStep = {
                 service.onBackspaceSweepDeleteStep()

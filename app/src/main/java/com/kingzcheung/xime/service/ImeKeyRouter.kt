@@ -93,37 +93,6 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         // 空键无任何按键语义，且下游 Rime 路由按 key[0] 取码（key.lowercase()[0]），
         // 空串会越界崩溃（2026-09-14 真机实证：滑动手势 commit 值为空时触发）。
         if (key.isEmpty()) return
-        // 剪贴板面板搜索聚焦：按键直接进搜索词（不进引擎、不上屏）。
-        // T9 数字键不经此路径——中文搜索走选词上屏被 commitTextSilently 拦截进搜索词。
-        if (service.keyboardViewModel.clipboardSearchFocused.value) {
-            val csNow = service.candidateState.value
-            val composingNow = csNow.isComposing || csNow.inputText.isNotEmpty() ||
-                csNow.preeditText.isNotEmpty() || csNow.pendingEnglishText.isNotEmpty()
-            when {
-                key == "delete" && !composingNow -> {
-                    service.keyboardViewModel.dropClipboardSearchLast()
-                    service.refreshClipboardSearchCandidates()
-                    return
-                }
-                (key == "enter" || key == "newline") && !composingNow -> {
-                    service.keyboardViewModel.exitClipboardSearch()
-                    service.candidateState.value = service.candidateState.value.copy(
-                        candidates = emptyList(),
-                        candidateComments = emptyList(),
-                        candidateActions = emptyList(),
-                        associationCandidates = emptyList()
-                    )
-                    return
-                }
-                key.length == 1 && !composingNow -> {
-                    service.keyboardViewModel.appendClipboardSearch(
-                        if (isShifted) key.uppercase() else key
-                    )
-                    service.refreshClipboardSearchCandidates()
-                    return
-                }
-            }
-        }
         if (service.uiState.value.toolPanelInputFocused) {
             val candState = service.candidateState.value
             val hasComposing = candState.isComposing || candState.inputText.isNotEmpty()
@@ -1385,12 +1354,6 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 先上屏并清空候选状态（与 enter 提交分支同序），再清引擎组合态。
      */
     private suspend fun commitPluginCandidate(text: String) {
-        // 剪贴板搜索模式：点选匹配条目 = 上屏该条目并退出搜索（进输入框，不进搜索词）
-        if (service.keyboardViewModel.clipboardSearchFocused.value) {
-            service.keyboardViewModel.exitClipboardSearch()
-            withContext(Dispatchers.Main) { service.commitText(text) }
-            return
-        }
         withContext(Dispatchers.Main) {
             service.commitText(text)
             service.candidateState.value = service.candidateState.value.copy(

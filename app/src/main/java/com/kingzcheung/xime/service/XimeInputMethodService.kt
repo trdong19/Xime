@@ -1633,13 +1633,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         hasControls = !state.toolPanelUiNodes.isNullOrEmpty(),
                     )
                 } else 0
-                // 剪贴板搜索界面撑高（竖屏 280dp / 横屏 160dp 矮版，键盘保持完整可用）
-                val isLandscapeHeight = resources.configuration.orientation ==
-                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
-                val clipboardPanelExtra = if (keyboardViewModel.clipboardSearchFocused.value) {
-                    if (isLandscapeHeight) 160 else 280
-                } else 0
-                val overlayPanelExtra = quickSendFormExtra + toolPanelExtra + clipboardPanelExtra
+                val overlayPanelExtra = quickSendFormExtra + toolPanelExtra
 
                 // 键盘内容高度 = 期望值 ∩ 宿主承载区预算。
                 // 独立 IME 面板（如 Horizon OS 悬浮面板）只给键盘一段区域，而 configuration
@@ -3446,46 +3440,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     internal fun quickSendNativeMatches(codes: List<String>, engineCandidates: List<String>): List<String> =
         quickSendNativeMatchesAnnotated(codes, engineCandidates).map { it.first }
-
-    /** 剪贴板搜索匹配：子串（忽略大小写）+ 拼音全拼/首字母前缀 + 九键数字串（T9 惯例）。 */
-    internal fun clipboardSearchMatch(text: String, queryLower: String): Boolean {
-        if (queryLower.isEmpty()) return false
-        if (text.contains(queryLower, ignoreCase = true)) return true
-        // 纯数字查询：条目拼音转九键数字串比对（"ni hao"→"64426"，按 64 出「你好」开头的条目）
-        if (queryLower.length >= 2 && queryLower.all { it in '2'..'9' }) {
-            val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
-            val digitParts = py.split(' ').map { codeToT9Digits(it) }
-            if (digitParts.any { it == null }) return false
-            return digitParts.filterNotNull().joinToString("").startsWith(queryLower)
-        }
-        if (queryLower.none { it in 'a'..'z' }) return false
-        val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
-        if (py.replace(" ", "").startsWith(queryLower)) return true
-        val initials = py.split(' ').mapNotNull { it.firstOrNull()?.toString() }.joinToString("")
-        return initials.startsWith(queryLower)
-    }
-
-    /**
-     * 剪贴板搜索模式刷新：按搜索词过滤剪贴板+常用语，结果写入
-     * keyboardViewModel.clipboardSearchResults（只供搜索界面大列表展示）。
-     * 不写候选栏——候选栏在搜索时保留正常打字候选（选词进搜索词）。
-     */
-    internal fun refreshClipboardSearchCandidates() {
-        if (!keyboardViewModel.clipboardSearchFocused.value) return
-        val q = keyboardViewModel.clipboardSearchQuery.value.trim().lowercase()
-        val results = if (q.isEmpty()) emptyList() else
-            (clipboardItemsState.value + quickSendItemsState.value)
-                .filter { it.type != ClipboardEntry.TYPE_IMAGE && clipboardSearchMatch(it.text, q) }
-                .distinctBy { it.text }
-                .take(20)
-        val timeFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        keyboardViewModel.clipboardSearchResults.value = results.map {
-            it.text to listOf(
-                it.code.takeIf { c -> c.isNotEmpty() },
-                timeFmt.format(java.util.Date(it.timestamp))
-            ).filterNotNull().joinToString(" · ")
-        }
-    }
 
     /**
      * 快捷发送候选（带注释）：注释 = 条目触发编码（无编码条目显示"快捷"），

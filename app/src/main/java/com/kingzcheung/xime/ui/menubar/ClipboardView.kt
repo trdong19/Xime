@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.StarBorder
@@ -68,7 +67,6 @@ import com.kingzcheung.xime.clipboard.ClipboardItem
 import com.kingzcheung.xime.clipboard.db.ClipboardEntry
 import com.kingzcheung.xime.clipboard.clipboardLongPressDrag
 import com.kingzcheung.xime.i18n.tr
-import com.kingzcheung.xime.service.PinyinTone
 import com.kingzcheung.xime.ui.CLIPBOARD_CARD_MAX_PX
 import com.kingzcheung.xime.ui.keyboard.WIDE_CONTAINER_WIDTH
 import com.kingzcheung.xime.ui.keyboard.tolerantClick
@@ -98,10 +96,6 @@ fun ClipboardView(
     modifier: Modifier = Modifier,
     onQuickSendAddClick: (() -> Unit)? = null,
     onQuickSendEditItem: ((Long, String, String) -> Unit)? = null,
-    /** 是否显示搜索栏（横屏半屏面板不显示，避免撑高触发收起）。 */
-    showSearch: Boolean = true,
-    /** 搜索栏点击：进入独立搜索界面（清组合区+撑高+键盘渲染）。 */
-    onSearchActivate: (() -> Unit)? = null,
     /** 剪贴板条目"存为常用语"：打开快捷发送表单并预填内容。 */
     onQuickSendCreateFromText: ((String) -> Unit)? = null,
     onPullRemote: (() -> Unit)? = null,
@@ -128,8 +122,6 @@ fun ClipboardView(
     var isMultiSelect by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var showClearConfirm by remember { mutableStateOf(false) }
-    val searchFocused by viewModel.clipboardSearchFocused.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.clipboardSearchQuery.collectAsStateWithLifecycle()
 
     fun exitMultiSelect() {
         isMultiSelect = false
@@ -296,60 +288,6 @@ fun ClipboardView(
             }
         }
 
-        // 增强搜索：子串（忽略大小写）+ 拼音全拼/首字母前缀（内置拼音字表）。
-        // 图片条目无文本，搜索态下隐藏
-        val q = searchQuery.trim()
-        val queryLower = q.lowercase()
-        val searching = q.isNotEmpty()
-        val shownClipboard = if (!searching) clipboardItems else clipboardItems.filter { item ->
-            item.type != ClipboardEntry.TYPE_IMAGE && matchesSearch(item.text, queryLower)
-        }
-        val shownQuickSend = if (!searching) quickSendItems else quickSendItems.filter { matchesSearch(it.text, queryLower) }
-
-        // 搜索栏：点按进入搜索（半屏+键盘，撑高）；再点退出恢复全屏面板（正常高度）
-        if (showSearch) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (searchFocused) accentColor.copy(alpha = 0.15f) else itemBgColor
-                    )
-                    .clickable {
-                        if (searchFocused) viewModel.exitClipboardSearch()
-                        else onSearchActivate?.invoke()
-                    }
-                    .padding(horizontal = 10.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = if (searchFocused) accentColor else subTextColor,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (searchQuery.isBlank()) tr(R.string.s_sousuotishi) else searchQuery,
-                    color = if (searchQuery.isBlank()) subTextColor else textColor,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f)
-                )
-                if (searchQuery.isNotEmpty()) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                        tint = subTextColor,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .clickable { viewModel.clearClipboardSearchQuery() }
-                    )
-                }
-            }
-        }
-
         val pagerState = rememberPagerState(
             initialPage = selectedTab,
             pageCount = { 2 }
@@ -373,7 +311,7 @@ fun ClipboardView(
         ) { page ->
             if (page == 0) {
                 ClipboardTabContent(
-                    items = shownClipboard,
+                    items = clipboardItems,
                     itemBgColor = itemBgColor,
                     textColor = textColor,
                     subTextColor = subTextColor,
@@ -397,7 +335,7 @@ fun ClipboardView(
                 )
             } else {
                 QuickSendTabContent(
-                    items = shownQuickSend,
+                    items = quickSendItems,
                     itemBgColor = itemBgColor,
                     textColor = textColor,
                     subTextColor = subTextColor,
@@ -1045,16 +983,4 @@ fun LongPressMenuItem(
             fontSize = 14.sp
         )
     }
-}
-
-/** 增强搜索匹配：子串（忽略大小写）+ 拼音全拼/首字母前缀（内置拼音字表覆盖的汉字文本）。 */
-private fun matchesSearch(text: String, queryLower: String): Boolean {
-    if (queryLower.isEmpty()) return true
-    if (text.contains(queryLower, ignoreCase = true)) return true
-    // 拼音匹配仅对含字母的查询启用（纯中文查询走子串）
-    if (queryLower.none { it in 'a'..'z' }) return false
-    val py = PinyinTone.plainPinyin(text)?.lowercase() ?: return false
-    if (py.replace(" ", "").startsWith(queryLower)) return true
-    val initials = py.split(' ').mapNotNull { it.firstOrNull()?.toString() }.joinToString("")
-    return initials.startsWith(queryLower)
 }

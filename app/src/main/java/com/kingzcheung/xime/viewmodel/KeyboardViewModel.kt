@@ -146,37 +146,6 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private val _candidatePageExpanded = MutableStateFlow(false)
     val candidatePageExpanded: StateFlow<Boolean> = _candidatePageExpanded.asStateFlow()
 
-    /** 剪贴板半屏面板搜索：聚焦时按键输入进搜索词（不进引擎/不上屏），候选栏变为匹配结果 */
-    val clipboardSearchFocused = MutableStateFlow(false)
-    val clipboardSearchQuery = MutableStateFlow("")
-    /** 搜索匹配结果（text to 注释），只供搜索界面展示——不进候选栏（候选栏保留正常打字候选） */
-    val clipboardSearchResults = MutableStateFlow<List<Pair<String, String>>>(emptyList())
-
-    /** 进入剪贴板搜索：关闭面板，回到主键盘；候选栏变为匹配结果，上方出现搜索条。 */
-    fun enterClipboardSearch() {
-        closeOverlay()
-        clipboardSearchFocused.value = true
-        clipboardSearchQuery.value = ""
-    }
-
-    /** 退出搜索：清空搜索词与搜索条（候选栏随下次刷新恢复）。 */
-    fun exitClipboardSearch() {
-        clipboardSearchFocused.value = false
-        clipboardSearchQuery.value = ""
-    }
-
-    fun clearClipboardSearchQuery() {
-        clipboardSearchQuery.value = ""
-    }
-
-    fun appendClipboardSearch(text: String) {
-        clipboardSearchQuery.value += text
-    }
-
-    fun dropClipboardSearchLast() {
-        clipboardSearchQuery.value = clipboardSearchQuery.value.dropLast(1)
-    }
-
     /** 打开/收起候选展开页。 */
     fun setCandidatePageExpanded(expanded: Boolean) {
         _candidatePageExpanded.value = expanded
