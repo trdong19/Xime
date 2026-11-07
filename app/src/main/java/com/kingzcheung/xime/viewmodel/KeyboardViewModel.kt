@@ -616,8 +616,6 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         val current = _page.value
         if (current is KeyboardPage.Overlay) {
             _page.value = current.behind
-            clipboardSearchFocused.value = false
-            clipboardSearchQuery.value = ""
             _syncViewState()
         }
     }

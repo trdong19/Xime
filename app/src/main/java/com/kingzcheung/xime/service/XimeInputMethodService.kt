@@ -2806,8 +2806,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         super.onWindowHidden()
         clearInputState()
         recentClipboardItemsState.value = emptyList()
-        // 键盘隐藏时自动退出剪贴板搜索（否则下次弹出仍是搜索态）
-        keyboardViewModel.exitClipboardSearch()
         // 键盘隐藏时重置快捷发送表单临时态：表单开启状态下直接隐藏键盘（未走 onClose）
         // 会把 showQuickSendForm 残留到下次弹窗，候选栏上方渲染出残留表单背景造成遮挡；
         // 回车键文案也需一并还原（打开表单时被改为"确定"）。
@@ -3178,12 +3176,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * 需在主线程调用。
      */
     internal fun commitTextSilently(text: String, isPaste: Boolean = false) {
-        // 剪贴板面板搜索聚焦：上屏文本进搜索词（不进输入框、不触发联想）。
-        // 覆盖中文选词/英文模式字母等所有上屏路径——半屏面板下直接用键盘打字搜索。
-        if (keyboardViewModel.clipboardSearchFocused.value) {
-            keyboardViewModel.appendClipboardSearch(text)
-            return
-        }
         // 会话日志：上屏文本（用于把按键序列与其最终结果对齐）
         KeyTapLogger.recordCommit(text, isPaste)
         if (uiState.value.quickSendFormFocused) {
