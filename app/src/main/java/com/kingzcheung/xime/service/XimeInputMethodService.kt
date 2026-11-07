@@ -1857,7 +1857,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             keyboardCallbacks = callbacks
                             val hapticView = LocalView.current
                             // 剪贴板搜索界面（浮窗键盘形态）：底层渲染（浮窗卡片在上层可拖动）
-                            if (keyboardViewModel.clipboardSearchFocused.value) {
+                            if (keyboardViewModel.clipboardSearchFocused.collectAsState().value) {
                                 ClipboardSearchView(
                                     query = keyboardViewModel.clipboardSearchQuery.collectAsState().value,
                                     results = keyboardViewModel.clipboardSearchResults.collectAsState().value,
@@ -1867,7 +1867,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                         exitClipboardSearch()
                                         textCommit.selectClipboardItem(text)
                                     },
-                                    backgroundColor = Color.Transparent,
+                                    backgroundColor = cardBg,
                                     itemBgColor = cardBg,
                                     textColor = candidateTextCol,
                                     subTextColor = candidateTextCol.copy(alpha = 0.6f),
@@ -2828,8 +2828,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         super.onWindowHidden()
         clearInputState()
         recentClipboardItemsState.value = emptyList()
-        // 键盘隐藏时自动退出剪贴板搜索（否则下次弹出仍是搜索态）
-        keyboardViewModel.exitClipboardSearch()
+        // 键盘隐藏时自动退出剪贴板搜索（含浮窗模式恢复普通键盘）
+        exitClipboardSearch()
         // 键盘隐藏时重置快捷发送表单临时态：表单开启状态下直接隐藏键盘（未走 onClose）
         // 会把 showQuickSendForm 残留到下次弹窗，候选栏上方渲染出残留表单背景造成遮挡；
         // 回车键文案也需一并还原（打开表单时被改为"确定"）。
@@ -3108,6 +3108,20 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     )
                 }
                 touchableRegion.set(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                // 剪贴板搜索模式：底部搜索界面（搜索框+结果列表）并入触摸区，
+                // 否则列表滚动/点选会穿透到后面的 app
+                if (keyboardViewModel.clipboardSearchFocused.value) {
+                    val density = resources.displayMetrics.density
+                    val kbH = (SettingsPreferences.getKeyboardHeightDp(this@XimeInputMethodService, false)
+                        .coerceAtMost((resources.configuration.screenHeightDp * 8) / 10) *
+                        FloatingCardGeometry.CARD_SCALE).toInt()
+                    val stripPx = ((kbH + 60) * density).toInt()
+                    val windowH = resources.displayMetrics.heightPixels
+                    touchableRegion.union(
+                        0, windowH - stripPx,
+                        resources.displayMetrics.widthPixels, windowH
+                    )
+                }
             }
         } else {
             // 非浮动模式：窗口全屏，容器物理高度 = Compose 内容总高（含底部留白），

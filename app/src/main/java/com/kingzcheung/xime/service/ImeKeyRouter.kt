@@ -104,7 +104,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 return
             }
             if ((key == "enter" || key == "newline") && !composingNow) {
-                service.keyboardViewModel.exitClipboardSearch()
+                // 退出搜索同时恢复普通键盘（浮窗模式切回）
+                service.exitClipboardSearch()
                 service.candidateState.value = service.candidateState.value.copy(
                     candidates = emptyList(),
                     candidateComments = emptyList(),
@@ -1375,6 +1376,28 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 先上屏并清空候选状态（与 enter 提交分支同序），再清引擎组合态。
      */
     private suspend fun commitPluginCandidate(text: String) {
+        // 英文直输模式：已敲的编码字符回删（敲 cl 点「claude code」→ 上屏 claude code
+        // 而非 clclaude code）——与英文联想词点选的回删替换同语义。
+        // 用 replaceBeforeCursor 带落点校验：光标位置与编码不对应（用户移动过光标）
+        // 时放弃替换降级为直接追加，避免误删用户文本
+        val pending = service.candidateState.value.pendingEnglishText
+        if (pending.isNotEmpty() && text.startsWith(pending)) {
+            val replaced = withContext(Dispatchers.Main) {
+                service.replaceBeforeCursor(pending, text)
+            }
+            if (replaced) {
+                withContext(Dispatchers.Main) {
+                    service.candidateState.value = service.candidateState.value.copy(
+                        pendingEnglishText = "",
+                        candidates = emptyList(),
+                        candidateComments = emptyList(),
+                        candidateActions = emptyList(),
+                        associationCandidates = emptyList()
+                    )
+                }
+                return
+            }
+        }
         withContext(Dispatchers.Main) {
             service.commitText(text)
             service.candidateState.value = service.candidateState.value.copy(

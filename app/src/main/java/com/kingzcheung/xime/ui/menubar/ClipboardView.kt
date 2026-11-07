@@ -720,7 +720,7 @@ fun ClipboardTabContent(
                         bgColor = itemBgColor,
                         textColor = textColor,
                         accentColor = accentColor,
-                        modifier = Modifier.height(70.dp),
+                        modifier = Modifier.height(80.dp),
                         onClick = onClick,
                         onLongClick = onLongClick,
                         dragKey = item.id,
