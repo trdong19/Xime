@@ -50,6 +50,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
+/** 剪贴板卡片右下角的复制时间格式（主线程使用，SimpleDateFormat 复用实例）。 */
+private val clipboardTimeFormat: java.text.SimpleDateFormat by lazy {
+    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+}
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -118,9 +123,6 @@ fun ClipboardView(
         0.35f
     )
     var menuAnchor by remember { mutableStateOf<MenuAnchor?>(null) }
-    val clipboardTimeFormat = remember {
-        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-    }
     var isMultiSelect by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var showClearConfirm by remember { mutableStateOf(false) }
