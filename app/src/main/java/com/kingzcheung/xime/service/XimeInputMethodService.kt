@@ -3117,10 +3117,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         FloatingCardGeometry.CARD_SCALE).toInt()
                     val stripPx = ((kbH + 60) * density).toInt()
                     val windowH = resources.displayMetrics.heightPixels
-                    touchableRegion.union(
+                    val searchRect = android.graphics.Rect(
                         0, windowH - stripPx,
                         resources.displayMetrics.widthPixels, windowH
                     )
+                    touchableRegion.union(searchRect)
                 }
             }
         } else {
