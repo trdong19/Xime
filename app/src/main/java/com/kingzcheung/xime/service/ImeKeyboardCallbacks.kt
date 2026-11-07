@@ -397,6 +397,10 @@ internal fun rememberImeKeyboardCallbacks(
             onT9ControllerCreated = { controller ->
                 service.t9InputControllerRef = controller
             },
+            onClipboardSearchActivate = {
+                // 进入搜索：切浮窗卡片形态（70% 透明可拖动）+ 清组合区 + 初始化搜索状态
+                service.enterClipboardSearch()
+            },
             onBackspaceSweepDeleteStep = {
                 service.onBackspaceSweepDeleteStep()
             },

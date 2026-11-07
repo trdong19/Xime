@@ -3221,6 +3221,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             searchRestoreFloating = true
             schemaController.toggleFloatingMode(true)
         }
+        // 悬浮键盘归位到搜索界面上方（搜索界面占底部 280dp，卡片浮在其上可拖动）
+        uiState.value = uiState.value.copy(floatingOffsetY = 320)
         mainHandler.post {
             runCatching { currentInputConnection?.finishComposingText() }
             endComposingInputBox()
