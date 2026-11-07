@@ -147,6 +147,13 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     val clipboardSearchQuery = MutableStateFlow("")
     val clipboardSearchResults = MutableStateFlow<List<Pair<String, String>>>(emptyList())
 
+    fun enterClipboardSearch() {
+        closeOverlay()
+        clipboardSearchFocused.value = true
+        clipboardSearchQuery.value = ""
+        clipboardSearchResults.value = emptyList()
+    }
+
     fun exitClipboardSearch() {
         clipboardSearchFocused.value = false
         clipboardSearchQuery.value = ""

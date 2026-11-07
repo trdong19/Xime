@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.ui.keyboard.FloatingCardGeometry
 import com.kingzcheung.xime.ui.keyboard.FloatingExitGlow
+import com.kingzcheung.xime.ui.keyboard.ClipboardSearchView
 import com.kingzcheung.xime.ui.keyboard.KeyboardResizeOverlay
 import com.kingzcheung.xime.ui.keyboard.KeyboardResizeBounds
 import com.kingzcheung.xime.ui.keyboard.KeyboardHostFit
