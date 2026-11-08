@@ -329,8 +329,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      *  主线程写（onStartInput）、key-processing 线程读（英文联想短路），volatile 保证可见性。 */
     @Volatile
     private var editorRestricted: Boolean = false
-    /** 秘密输入框（密码/TYPE_NULL）：英文联想与回删替换的统一禁用线 */
+    /** 秘密输入框（密码/TYPE_NULL）：英文联想与回删替换的统一禁用线。
+     *  主线程写（onStartInput）、key-processing 线程读，volatile 保证可见性。 */
+    @Volatile
     private var editorSecret: Boolean = false
+    /** 终端类输入框（TYPE_NULL，如 Termux）：可经设置开关放开快捷发送（密码框不在其列） */
+    @Volatile
+    private var editorTerminal: Boolean = false
 
     internal var isTrackingVoiceButtons = false
     internal var voiceRecordingStarted = false
@@ -444,10 +449,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 注释=触发编码/"快捷"、与引擎候选按文本去重（否则同词出现两次）。
         // 注入条目走 expandedActions 直接上屏；引擎候选的全局索引由路由侧按
         // expandedHostCount 平移回引擎全局索引（selectCandidateGlobal/deleteCandidateGlobal）
-        val hostMatches = quickSendNativeMatchesAnnotated(
+        val hostMatches = if (englishCandidatesAllowed()) quickSendNativeMatchesAnnotated(
             codes = listOf(rimeEngine.getInput(), candidateState.value.pendingEnglishText),
             engineCandidates = emptyList()
-        )
+        ) else emptyList()
         val hostCount = hostMatches.size
         val builder = ArrayList<RimeCandidate>(engineAll.size + hostCount)
         val hostPositions = HashSet<Int>()
@@ -2245,6 +2250,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
                 }
             }
+            endEnglishRoundOnCaretMove()
         }
     }
 
@@ -2277,6 +2283,21 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         selfWriteCaret.noteWrite(target - pos, android.os.SystemClock.uptimeMillis())
         ic.setSelection(target, target)
+        endEnglishRoundOnCaretMove()
+    }
+
+    /**
+     * 空闲态光标被移动（输入法光标键/行首尾跳转）= 英文输入轮终结：
+     * 定格组合区（若有）并清镜像与联想——否则点候选时盲删替换按陈旧镜像
+     * 定位，会删掉光标新位置前的无关文本。组合态由 onUpdateSelection 定格分支处理，
+     * 此处覆盖的是 fallback 直传态（englishComposingActive=false 但镜像非空）与
+     * 自身写入位移被守卫消费、宿主回调不到位的场景。需在主线程调用。
+     */
+    private fun endEnglishRoundOnCaretMove() {
+        if (englishComposingActive || candidateState.value.pendingEnglishText.isNotEmpty()) {
+            finishEnglishComposition()
+            clearEnglishMirrorAfterAppend()
+        }
     }
 
     override fun executeCommand(name: String) {
@@ -2328,6 +2349,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         editorRestricted = EditorInfoClassifier.isRestrictedEditor(attribute)
         // 秘密输入框判定（密码/终端，不含 NO_SUGGESTIONS）：英文联想/回删替换的禁用线
         editorSecret = EditorInfoClassifier.isSecretEditor(attribute)
+        // 终端类输入框判定（仅 TYPE_NULL）：终端快捷发送开关的作用域
+        editorTerminal = EditorInfoClassifier.isTerminalEditor(attribute)
 
         // 输入 target 变化：旧编辑框的 composing 区域不再可达，复位标记。
         // 防御 stale 标记导致 endComposingInputBox 对新编辑框执行 setComposingText("")
@@ -3091,13 +3114,28 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     /**
+     * 终端类输入框（TYPE_NULL，如 Termux）快捷发送开关是否生效。
+     * 终端无组合区语义：字母直传 + 点候选按已敲长度回删（盲删，宿主不支持读前文无法校验，
+     * 终端光标被移动后可能删错字符）——须用户在设置显式开启。
+     */
+    internal fun terminalQuickSendEnabled(): Boolean =
+        editorTerminal && SettingsPreferences.isTerminalQuickSendEnabled(this)
+
+    /**
+     * 英文联想/快捷发送候选总闸门：非秘密框可用；TYPE_NULL 终端按设置开关；密码框永不
+     * （联想泄漏输入前缀、候选回删破坏密码输入）。
+     */
+    internal fun englishCandidatesAllowed(): Boolean =
+        !editorSecret || terminalQuickSendEnabled()
+
+    /**
      * 英文候选替换总能力：组合区承载优先（宿主无关——commitText 整体替换组合区
-     * 不依赖读前文），回退直传模式按旧探针判定。
+     * 不依赖读前文），回退直传模式按旧探针判定，终端按开关（盲删兜底）。
      * 联想候选的显示/回填闸门统一用本函数（WebView 类输入框拿不到前文但组合区可用，
      * 旧探针会误杀联想）。
      */
     internal fun englishCandidateReplaceSupported(): Boolean =
-        englishCompositionAllowed() || supportsEnglishCandidateReplace()
+        englishCompositionAllowed() || supportsEnglishCandidateReplace() || terminalQuickSendEnabled()
 
     override fun onDestroy() {
         super.onDestroy()

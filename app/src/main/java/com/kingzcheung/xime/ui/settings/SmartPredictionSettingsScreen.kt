@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -243,6 +244,25 @@ fun SmartPredictionSettingsContent(
                         )
                     })
                 }
+            }
+
+            // 终端输入框快捷发送：独立于智能联想开关（快捷发送命中走内置词库，不依赖联想模型）
+            item {
+                var terminalQuickSend by remember {
+                    mutableStateOf(SettingsPreferences.isTerminalQuickSendEnabled(context))
+                }
+                SettingsSection(title = tr(R.string.s_zhongduanshurukuaiikuaijiefasong), content = {
+                    SettingsToggleItem(
+                        icon = Icons.Default.Terminal,
+                        title = tr(R.string.s_zaizhongduanshurukuangliyong),
+                        subtitle = tr(R.string.s_zaitermuxdengzhongduanshurukuang_xian_9c21a),
+                        checked = terminalQuickSend,
+                        onCheckedChange = {
+                            terminalQuickSend = it
+                            SettingsPreferences.setTerminalQuickSendEnabled(context, it)
+                        }
+                    )
+                })
             }
 
             if (predictionModels.isNotEmpty()) {

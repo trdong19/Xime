@@ -72,6 +72,15 @@ internal object EditorInfoClassifier {
     }
 
     /**
+     * 终端类输入框（TYPE_NULL，如 Termux）：宿主要求原始按键语义。
+     * 与 [isSecretEditor] 的区别：密码类变体不是终端——终端可经用户开关放开
+     * 快捷发送/英文联想（直传+盲删替换），密码框永不放开（联想泄漏输入前缀）。
+     */
+    fun isTerminalEditor(info: EditorInfo?): Boolean {
+        return info != null && info.inputType == InputType.TYPE_NULL
+    }
+
+    /**
      * 数字类输入框（数字/电话/日期时间，含数字密码框）：适合自动弹出数字键盘。
      *
      * 数字密码框（支付密码/验证码等，TYPE_CLASS_NUMBER + TYPE_NUMBER_VARIATION_PASSWORD）

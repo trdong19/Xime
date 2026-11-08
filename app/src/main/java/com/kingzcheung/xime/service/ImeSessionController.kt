@@ -71,8 +71,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         var t9CandidateActions: List<CandidateAction> = emptyList()
         /** T9 右选定位注释（引擎原注释，与 displayCandidates 平行）；非 T9 为空。 */
         var mergedEngineComments: List<String> = emptyList()
-        /** QWERTY/ascii 模式下内置快捷发送命中的短语（与 displayCandidates 尾部平行）；非该模式为空。 */
-        var nativeQuickActions: List<CandidateAction> = emptyList()
+        /** 非 T9：内置快捷发送 actions（已按显示位对齐插入 pluginActions）；其余模式为空。 */
+        var nativeAlignedActions: List<CandidateAction> = emptyList()
         if (isT9Schema) {
             // T9 编码显示永不回退原始数字 input：preedit 缺失，或含未转换数字
             //（合成切不出词时引擎把原始输入当编码回退，如全拼+简拼混合态）时，
@@ -131,10 +131,10 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // 内置快捷发送：编码命中（T9 数字码 input / 字母码 preedit）与内容命中，
             // 插在第一候选之后（第二候选位，避免被候选栏折叠隐藏）；
             // 注释 = 条目触发编码（无编码"快捷"），与常用语插件显示一致
-            val nativeQuickT9 = service.quickSendNativeMatchesAnnotated(
+            val nativeQuickT9 = if (service.englishCandidatesAllowed()) service.quickSendNativeMatchesAnnotated(
                 codes = listOf(inputText, rawPreedit, pendingEnglish),
                 engineCandidates = baseCands,
-            )
+            ) else emptyList()
             if (nativeQuickT9.isNotEmpty() && mergedCands.isNotEmpty()) {
                 val insertAt = minOf(1, mergedCands.size)
                 for ((k, match) in nativeQuickT9.withIndex()) {
@@ -155,14 +155,21 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // 不能混入回显字符。历史上曾整体用 input 规避自装双拼插件的展开编码显示，
             // 代价是全拼丢失分隔符；现仅显示层恢复 librime 标准回显。
             displayText = if (preeditText.isNotEmpty()) preeditText else inputText
-            val nativeQuick = service.quickSendNativeMatchesAnnotated(
+            val nativeQuick = if (service.englishCandidatesAllowed()) service.quickSendNativeMatchesAnnotated(
                 codes = listOf(inputText, preeditText, pendingEnglish),
                 engineCandidates = filteredTexts,
-            )
-            nativeQuickActions = nativeQuick.map { CandidateAction.plugin(it.first) }
+            ) else emptyList()
             // 编码命中插第二候选位（可见性）；内容命中追加末尾。注释 = 触发编码/"快捷"
             val nativeHead = nativeQuick.take(1)
             val nativeTail = nativeQuick.drop(1)
+            // actions 与显示列表同位插入：display 把 nativeHead 插在引擎第 1 位之后，
+            // actions 也必须插在 pluginActions 第 1 位之后——否则点击插入位候选会取到
+            // 错位 action，上屏错词（2190b6e 引入的既有错位，2026-11-08 修复）
+            val nativeHeadActions = nativeHead.map { CandidateAction.plugin(it.first) }
+            val nativeTailActions = nativeTail.map { CandidateAction.plugin(it.first) }
+            nativeAlignedActions = if (nativeHead.isNotEmpty() && filteredTexts.isNotEmpty())
+                pluginActions.take(1) + nativeHeadActions + pluginActions.drop(1) + nativeTailActions
+                else pluginActions + nativeTailActions
             displayCandidates = if (nativeHead.isNotEmpty() && filteredTexts.isNotEmpty())
                 listOf(filteredTexts.first()) + nativeHead.map { it.first } + filteredTexts.drop(1) + nativeTail.map { it.first }
                 else filteredTexts + nativeTail.map { it.first }
@@ -190,7 +197,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             hasPrevPage = hasPrevPage,
             // 候选词变换映射（全键盘 pluginActions + native 快捷发送 / T9 平行 actions；防御空）
             candidateActions = if (isT9Schema) t9CandidateActions
-            else pluginActions + nativeQuickActions,
+            else nativeAlignedActions,
             // T9 右选定位注释（引擎原注释）；非 T9 显式清空防跨模式残留错位
             t9EngineComments = if (isT9Schema) mergedEngineComments else emptyList(),
             // T9 显示注释覆盖表（供候选展开页 CandidatePage 回填，key=候选文本）
@@ -205,7 +212,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         // composing 快照 → 插件（input_changed 事件；T9 与候选栏同源显示态）
         service.pluginEvents.dispatchInputChanged(if (isT9Schema) displayText else inputText)
 
-        if (pendingEnglish.isNotEmpty() && !service.isSecretEditor() && service.englishCandidateReplaceSupported()) {
+        if (pendingEnglish.isNotEmpty() && service.englishCandidatesAllowed() && service.englishCandidateReplaceSupported()) {
             service.serviceScope.launch {
                 val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
                 withContext(Dispatchers.Main) {
@@ -381,7 +388,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         // composing 快照 → 插件（input_changed 事件；空编码表示本轮输入结束）
         service.pluginEvents.dispatchInputChanged(if (isT9Schema) displayText else result.inputText)
 
-        if (pendingEnglish.isNotEmpty() && !service.isSecretEditor() && service.englishCandidateReplaceSupported()) {
+        if (pendingEnglish.isNotEmpty() && service.englishCandidatesAllowed() && service.englishCandidateReplaceSupported()) {
             service.serviceScope.launch {
                 val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
                 withContext(Dispatchers.Main) {

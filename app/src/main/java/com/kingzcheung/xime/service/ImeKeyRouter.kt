@@ -836,12 +836,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         } else {
                             displayCandidates.map { it.text } to displayCandidates.map { it.comment }
                         }
-                        // 秘密输入框（密码/终端）禁英文联想：联想会泄漏输入前缀，
-                        // 回删替换也会破坏受限宿主的输入。NO_SUGGESTIONS 只是宿主
-                        // 不要内联补全，候选栏联想仍提供（与退格/applyComposition 路径同口径）。
-                        val secret = service.isSecretEditor()
+                        // 候选总闸门：密码框永不；TYPE_NULL 终端按设置开关（直传+盲删替换）；
+                        // 其余情况可用。NO_SUGGESTIONS 只是宿主不要内联补全，联想仍提供。
+                        val candidatesAllowed = service.englishCandidatesAllowed()
                         // 内置快捷发送：编码命中（组合编码/待确认英文）与内容命中（条目以候选开头）
-                        val nativeQuick = if (secret) emptyList() else service.quickSendNativeMatches(
+                        val nativeQuick = if (!candidatesAllowed) emptyList() else service.quickSendNativeMatches(
                             codes = listOf(capturedInputText, pendingEnglish),
                             engineCandidates = filteredTexts,
                         )
@@ -850,7 +849,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             candidates = filteredTexts + nativeQuick,
                             candidateComments = filteredComments + nativeQuick.map { "" },
                             isComposing = capturedInputText.isNotEmpty(),
-                            associationCandidates = if (secret || ((capturedIsAscii || !service.isChineseMode) && pendingEnglish.isEmpty())) emptyList() else service.candidateState.value.associationCandidates,
+                            associationCandidates = if (!candidatesAllowed || ((capturedIsAscii || !service.isChineseMode) && pendingEnglish.isEmpty())) emptyList() else service.candidateState.value.associationCandidates,
                             isShowingRecentClipboard = false,
                             hasNextPage = capturedHasNext,
                             hasPrevPage = capturedHasPrev,
@@ -861,7 +860,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             FileLogger.i(XimeInputMethodService.TAG, "keyRouter UI refresh: ascii ${service.uiState.value.isAsciiMode}->$capturedIsAscii")
                         }
                         service.uiState.value = service.uiState.value.copy(isAsciiMode = capturedIsAscii)
-                        if (pendingEnglish.isNotEmpty() && !secret && service.englishCandidateReplaceSupported()) {
+                        if (pendingEnglish.isNotEmpty() && candidatesAllowed && service.englishCandidateReplaceSupported()) {
                             service.serviceScope.launch {
                                 val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
                                 withContext(Dispatchers.Main) {
@@ -1124,7 +1123,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             candidateActions = emptyList()
                         )
                     }
-                    if (!service.isSecretEditor() && service.englishCandidateReplaceSupported()) {
+                    if (service.englishCandidatesAllowed() && service.englishCandidateReplaceSupported()) {
                         service.serviceScope.launch {
                             val candidates = service.predictionManager.getEnglishAssociations(newPending, PredictionManager.MAX_ASSOCIATION_COUNT)
                             withContext(Dispatchers.Main) {
@@ -1489,10 +1488,23 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }
                 return
             }
-            // replaceBeforeCursor 失败（WebView 等输入框拿不到前文）：编码是本输入法
-            // 逐字上屏的可信回删——按长度 deleteSurroundingText 后上屏短语
-            withContext(Dispatchers.Main) {
-                runCatching { service.currentInputConnection?.deleteSurroundingText(pending.length, 0) }
+            // replaceBeforeCursor 失败后区分两态：仅"读不到前文"（WebView/终端，
+            // getTextBeforeCursor 为 null）才按长度盲删——编码是本输入法逐字上屏的可信回删；
+            // 读得到但不匹配 = 光标已被用户移动，盲删必删错——降级纯追加
+            val beforeReadable = withContext(Dispatchers.Main) {
+                runCatching {
+                    service.currentInputConnection?.getTextBeforeCursor(pending.length, 0) != null
+                }.getOrDefault(false)
+            }
+            if (beforeReadable) {
+                FileLogger.w(
+                    XimeInputMethodService.TAG,
+                    "commitPluginCandidate: 前文可读但不匹配（光标已移动），降级纯追加"
+                )
+            } else {
+                withContext(Dispatchers.Main) {
+                    runCatching { service.currentInputConnection?.deleteSurroundingText(pending.length, 0) }
+                }
             }
         }
         withContext(Dispatchers.Main) {

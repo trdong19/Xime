@@ -106,10 +106,14 @@ internal fun rememberImeKeyboardCallbacks(
                             // service 层重定向，避免编码回删/替换作用到错误的屏上文本。
                             var replaced = service.replaceBeforeCursor(pendingEnglish, text)
                             if (!replaced) {
-                                // WebView 等输入框 getTextBeforeCursor 可能拿不到前文：
-                                // 编码是本输入法逐字上屏的可信回删——按长度回删后上屏短语
+                                // 仅"读不到前文"（WebView/终端，探针为 null）才按长度盲删——
+                                // 编码是本输入法逐字上屏的可信回删；读得到但不匹配 = 光标已被
+                                // 用户移动，盲删必删错——降级纯追加
                                 val ic = service.currentInputConnection
-                                if (ic?.deleteSurroundingText(pendingEnglish.length, 0) == true) {
+                                val beforeReadable = runCatching {
+                                    ic?.getTextBeforeCursor(pendingEnglish.length, 0) != null
+                                }.getOrDefault(false)
+                                if (!beforeReadable && ic?.deleteSurroundingText(pendingEnglish.length, 0) == true) {
                                     service.commitText(text)
                                     replaced = true
                                 }

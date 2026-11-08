@@ -53,6 +53,7 @@ object SettingsPreferences {
     private const val KEY_PREDICTION_MODEL_REPO = "prediction_model_repo"
     private const val KEY_PREDICTION_SELECTED_MODEL = "prediction_selected_model"
     private const val KEY_SPACE_COMMIT_ASSOCIATION = "space_commit_association"
+    private const val KEY_TERMINAL_QUICK_SEND = "terminal_quick_send_enabled"
     private const val KEY_ASSOCIATION_SINGLE_MODE = "association_single_mode"
     
     const val KEY_STT_ENABLED = "stt_enabled"
@@ -563,6 +564,19 @@ object SettingsPreferences {
 
     fun setSpaceCommitAssociationEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SPACE_COMMIT_ASSOCIATION, enabled).apply()
+    }
+
+    /**
+     * 终端类输入框（TYPE_NULL，如 Termux）启用快捷发送/英文联想：默认关。
+     * 终端无组合区语义，点候选走"按已敲长度回删替换"（盲删）——终端光标被
+     * 用户移动后可能删错字符，故做成显式开关。
+     */
+    fun isTerminalQuickSendEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_TERMINAL_QUICK_SEND, false)
+    }
+
+    fun setTerminalQuickSendEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_TERMINAL_QUICK_SEND, enabled).apply()
     }
 
     /**

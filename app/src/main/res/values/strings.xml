@@ -892,6 +892,9 @@
     <string name="s_weijiancedaomoxingwenjian_qing_6a5a6">未检测到模型文件，请先下载模型</string>
     <string name="s_lianxiangxingwei">联想行为</string>
     <string name="s_konggeshangpinglianxianghouxuan">空格上屏联想候选</string>
+    <string name="s_zhongduanshurukuaiikuaijiefasong">终端输入框快捷发送</string>
+    <string name="s_zaizhongduanshurukuangliyong">在 Termux 等终端输入框启用</string>
+    <string name="s_zaitermuxdengzhongduanshurukuang_xian_9c21a">在 Termux 等终端输入框显示快捷发送/英文联想候选。终端不支持读取光标前文本，移动过终端光标后点候选可能删错字符，默认关闭</string>
     <string name="s_youlianxianghouxuanshi_ankongg_00102">有联想候选时，按空格键直接上屏第一个联想词</string>
     <string name="s_lianxulianxiang">连续联想</string>
     <string name="s_lianxiangcishangpinghoujixutui_d319f">联想词上屏后继续推理，可连续空格上屏联想词</string>
