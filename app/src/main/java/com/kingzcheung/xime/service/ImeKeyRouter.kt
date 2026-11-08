@@ -1382,13 +1382,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         // 时放弃替换降级为直接追加，避免误删用户文本
         val pending = service.candidateState.value.pendingEnglishText
         if (pending.isNotEmpty() && text.startsWith(pending)) {
+            // 先清编码记录：commitTextSilently 的回删依据 pendingEnglish，
+            // 不先清会重复回删（回删已敲编码→上屏短语，一步到位）
+            service.candidateState.value = service.candidateState.value.copy(
+                pendingEnglishText = ""
+            )
             val replaced = withContext(Dispatchers.Main) {
                 service.replaceBeforeCursor(pending, text)
             }
             if (replaced) {
                 withContext(Dispatchers.Main) {
                     service.candidateState.value = service.candidateState.value.copy(
-                        pendingEnglishText = "",
                         candidates = emptyList(),
                         candidateComments = emptyList(),
                         candidateActions = emptyList(),

@@ -79,6 +79,11 @@ internal fun rememberImeKeyboardCallbacks(
                                 associationCandidates = emptyList()
                             )
                         } else {
+                            // 先清编码记录：commitTextSilently 的回删依据 pendingEnglish，
+                            // 不先清会重复回删（回删已敲编码→上屏短语，一步到位）
+                            service.candidateState.value = service.candidateState.value.copy(
+                                pendingEnglishText = ""
+                            )
                             // 内部编辑器（快捷发送/工具面板）与宿主 InputConnection 统一走
                             // service 层重定向，避免编码回删/替换作用到错误的屏上文本。
                             var replaced = service.replaceBeforeCursor(pendingEnglish, text)
