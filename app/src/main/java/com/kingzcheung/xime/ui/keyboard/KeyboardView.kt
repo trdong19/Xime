@@ -144,7 +144,6 @@ fun KeyboardView(
         }
     }
     val viewState by viewModel.viewState.collectAsStateWithLifecycle()
-    val clipboardSearchFocused = viewModel.clipboardSearchFocused.collectAsStateWithLifecycle().value
     val isLandscape = if (state.isFloatingMode) false
         else LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -278,8 +277,6 @@ fun KeyboardView(
 
     val contentModifier = if (state.isFloatingMode) {
         modifier.keyboardBackground(themeScheme.keyboardBackground, state.isDarkTheme, keyboardBgColor)
-            // 剪贴板搜索模式：卡片 70% 透明（可透见后方搜索界面/app 内容）
-            .alpha(if (clipboardSearchFocused) 0.3f else 1f)
     } else {
         // 非浮动模式：渐变背景由 XimeInputMethodService 外层 Box 统一绘制（含导航栏区，
         // 保证延伸到屏幕底部时渐变连续），此处不再叠加第二层背景。

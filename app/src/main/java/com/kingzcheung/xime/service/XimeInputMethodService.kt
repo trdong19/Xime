@@ -2850,6 +2850,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     override fun onWindowShown() {
         super.onWindowShown()
+        // 键盘弹出时若剪贴板搜索仍处聚焦（异常残留）→ 自动退出，恢复正常键盘
+        if (keyboardViewModel.clipboardSearchFocused.value) {
+            exitClipboardSearch()
+        }
         // 键盘弹出时对比系统取色与缓存的动态主题色，壁纸取色变化则重建主题并热更新 UI。
         // 每次弹出只做两次资源读取对比，取色未变时零成本。
         KeyboardThemes.refreshDynamicSchemes(this)

@@ -1397,6 +1397,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }
                 return
             }
+            // replaceBeforeCursor 失败（WebView 等输入框拿不到前文）：编码是本输入法
+            // 逐字上屏的可信回删——按长度 deleteSurroundingText 后上屏短语
+            withContext(Dispatchers.Main) {
+                runCatching { service.currentInputConnection?.deleteSurroundingText(pending.length, 0) }
+            }
         }
         withContext(Dispatchers.Main) {
             service.commitText(text)
