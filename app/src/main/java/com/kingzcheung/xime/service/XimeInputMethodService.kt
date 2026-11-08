@@ -3447,8 +3447,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             searchRestoreFloating = true
             schemaController.toggleFloatingMode(true)
         }
-        // 悬浮键盘归位到搜索界面上方（搜索界面占底部 280dp，卡片浮在其上可拖动）
-        uiState.value = uiState.value.copy(floatingOffsetY = 320)
+        // 悬浮键盘归位到搜索界面上方可拖动：竖屏搜索界面占底部 280dp → 卡片 320dp；
+        // 横屏搜索界面只有 160dp，沿用竖屏偏移会把卡片顶出屏幕外（键盘整个不可见）
+        val landscape = resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        uiState.value = uiState.value.copy(floatingOffsetY = if (landscape) 200 else 320)
         mainHandler.post {
             // 英文组合区先定格（字符保留），再走中文 composing 清理；
             // 并清英文镜像——搜索期间字母经 commitTextSilently 重定向进搜索词，

@@ -62,6 +62,11 @@ internal fun rememberImeKeyboardCallbacks(
             onAssociationSelect = { index ->
                 service.feedbackManager.performKeyPressEffect(view = view)
                 val cs = service.candidateState.value
+                // 诊断日志（logcat tag=XimeTap）：定位终端点候选走哪条降级路径
+                android.util.Log.i(
+                    "XimeTap",
+                    "assocSelect idx=$index pending='${cs.pendingEnglishText}' rs=${cs.englishReplaceSupported} terminal=${service.isTerminalEditor()} assoc=${cs.associationCandidates.size}"
+                )
                 val adjustedCandidates = if (cs.pendingEnglishText.isNotEmpty() && cs.englishReplaceSupported) {
                     listOf(cs.pendingEnglishText) + cs.associationCandidates
                 } else {
@@ -76,6 +81,7 @@ internal fun rememberImeKeyboardCallbacks(
                         // 第 0 项即当前已键入文本本身（上屏确认），无需替换。
                         if (index == 0 && text == pendingEnglish) {
                             // 定格组合区：字符保留在输入框，只清状态
+                            android.util.Log.i("XimeTap", "assocSelect → index0 确认分支（不删除不提交）")
                             service.finishEnglishComposition()
                             service.candidateState.value = service.candidateState.value.copy(
                                 pendingEnglishText = "",
@@ -118,6 +124,10 @@ internal fun rememberImeKeyboardCallbacks(
                                 }.getOrNull()
                                 when {
                                     service.isTerminalEditor() -> {
+                                        android.util.Log.i(
+                                            "XimeTap",
+                                            "assocSelect → 终端 DEL×${pendingEnglish.length} 后提交 '$text'"
+                                        )
                                         repeat(pendingEnglish.length) {
                                             service.sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DEL)
                                         }
@@ -151,6 +161,10 @@ internal fun rememberImeKeyboardCallbacks(
                             )
                         }
                     } else {
+                        android.util.Log.i(
+                            "XimeTap",
+                            "assocSelect → pending 为空，纯追加 '$text'（无回删）"
+                        )
                         // 单次联想模式（仅中文模式——英文 commitText 不触发推理，
                         // 否则抑制标志会悬挂并吞掉下次切回中文后的首轮推理）：
                         // 联想候选上屏前先置抑制标志——commitText 触发的下一轮自动推理

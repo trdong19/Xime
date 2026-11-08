@@ -731,6 +731,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                     val committed = result.committedText
                                     if (state.isAsciiMode && committed.isNotEmpty() && result.inputText.isEmpty() && result.candidates.isEmpty()) {
                                         val newPending = candState.pendingEnglishText + committed
+                                        android.util.Log.i("XimeTap", "letter→A rime直传 committed='$committed' pending='$newPending'")
                                         // 英文组合区承载：整段 pending 写入 composing region（点选候选时
                                         // commitText 自动整体替换，零回删）；宿主拒绝或内部输入态
                                         // （搜索/面板/表单聚焦，文本经 commitTextSilently 重定向）时回退直传。
@@ -746,6 +747,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                         }
                                         sendTransformedResult(result) { if (service.calculatorEngine.isActive()) updateCalculatorCandidates() }
                                     } else {
+                                        android.util.Log.i("XimeTap", "letter→C rime组合提交 committed='$committed' input='${result.inputText}' cands=${result.candidates.size}（此路径不积累 pending！）")
                                         if (committed.isNotEmpty()) {
                                             withContext(Dispatchers.Main) { service.commitText(committed) }
                                         }
@@ -762,6 +764,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                                         // 宿主拒绝或内部输入态（搜索/面板/表单聚焦）时回退直传。
                                                         // 镜像更新与组合区写入同在主线程串行（防定格分支竞态回写旧镜像）。
                                                         withContext(Dispatchers.Main) {
+                                                            android.util.Log.i("XimeTap", "letter→B 直传 char='$charToCommit' pending='$newPending'")
                                                             if (service.writeEnglishComposition(newPending)) {
                                                                 service.noteSelfWriteCaretDelta(charToCommit.length)
                                                             } else {
@@ -1452,6 +1455,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         // 用 replaceBeforeCursor 带落点校验：光标位置与编码不对应（用户移动过光标）
         // 时放弃替换降级为直接追加，避免误删用户文本
         val pending = service.candidateState.value.pendingEnglishText
+        android.util.Log.i(
+            "XimeTap",
+            "pluginCommit text='$text' pending='$pending' composing=${service.isEnglishComposing()} terminal=${service.isTerminalEditor()}"
+        )
         if (pending.isNotEmpty() && text.startsWith(pending)) {
             // 先清编码记录：commitTextSilently 的回删依据 pendingEnglish，
             // 不先清会重复回删（回删已敲编码→上屏短语，一步到位）
@@ -1500,6 +1507,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }.getOrNull()
                 when {
                     service.isTerminalEditor() -> {
+                        android.util.Log.i("XimeTap", "pluginCommit → 终端 DEL×${pending.length}")
                         repeat(pending.length) {
                             service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
                         }
