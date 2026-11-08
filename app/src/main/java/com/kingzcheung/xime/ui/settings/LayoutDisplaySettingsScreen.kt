@@ -382,50 +382,6 @@ fun LayoutDisplaySettingsContent(
             }
 
             item {
-                // 悬浮键盘不透明度：默认 100%（完全不透明）；横屏剪贴板搜索等场景
-                // 拉低可透出键盘下方内容，拖动键盘让位后可点选
-                SettingsSection(title = tr(R.string.s_xuanfujianpan), content = {
-                    var opacitySlider by remember {
-                        mutableStateOf(SettingsPreferences.getFloatingOpacity(context).toFloat())
-                    }
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = tr(R.string.s_xuanfujianpanbutoumingdu),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = tr(R.string.s_ge, opacitySlider.toInt()),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Slider(
-                            value = opacitySlider,
-                            onValueChange = { opacitySlider = it },
-                            onValueChangeFinished = {
-                                SettingsPreferences.setFloatingOpacity(context, opacitySlider.toInt())
-                            },
-                            valueRange = 30f..100f,
-                            steps = 13
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = tr(R.string.s_ladihouketouchujianpanxiafangn_8a11c),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                })
-            }
-
-            item {
                 SettingsSection(title = tr(R.string.s_shurukuangshipei), content = {
                     var autoNumberKeyboard by remember {
                         mutableStateOf(SettingsPreferences.isAutoNumberKeyboardEnabled(context))

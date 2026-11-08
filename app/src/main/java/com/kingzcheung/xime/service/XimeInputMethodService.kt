@@ -620,7 +620,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             toolbarButtons = SettingsPreferences.getToolbarButtons(this),
             isFloatingMode = isFloatingMode,
             isTerminalQuickSendOn = SettingsPreferences.isTerminalQuickSendEnabled(this),
-            floatingOpacity = SettingsPreferences.getFloatingOpacity(this),
             floatingOffsetX = clampedX,
             floatingOffsetY = clampedY,
         )
@@ -637,11 +636,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 "floating_mode", "floating_mode_landscape" -> {
                     loadDarkModePreference()
                     applyWindowBackground()
-                }
-                "floating_opacity" -> {
-                    uiState.value = uiState.value.copy(
-                        floatingOpacity = SettingsPreferences.getFloatingOpacity(this)
-                    )
                 }
                 "stt_enabled" -> {
                     val sttEnabled = SettingsPreferences.isSttEnabled(this@XimeInputMethodService)
@@ -1814,7 +1808,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     isDarkTheme = isDarkTheme,
                                     darkMode = state.darkMode,
                                     isTerminalQuickSendOn = state.isTerminalQuickSendOn,
-                                    floatingOpacity = state.floatingOpacity,
                                     themeId = state.themeId,
                                     keyboardHeightDp = effectiveKeyboardHeight,
                                     keyboardBottomPaddingDp = state.keyboardBottomPaddingDp,
