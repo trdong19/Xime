@@ -373,6 +373,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 service.recordCleared(candState.inputText)
                                 clearInputStateForKeys()
                             }
+                        }
                     } else {
                         // 空闲态：清空输入框全部已上屏文本。
                         service.calculatorEngine.clear()
