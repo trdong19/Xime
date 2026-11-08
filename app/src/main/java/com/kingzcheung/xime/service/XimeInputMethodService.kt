@@ -3447,11 +3447,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             searchRestoreFloating = true
             schemaController.toggleFloatingMode(true)
         }
-        // 悬浮键盘归位到搜索界面上方可拖动：竖屏搜索界面占底部 280dp → 卡片 320dp；
-        // 横屏搜索界面只有 160dp，沿用竖屏偏移会把卡片顶出屏幕外（键盘整个不可见）
+        // 悬浮键盘归位：竖屏 320dp（搜索界面 = 键盘高+60 ≈ 280dp，卡片浮其上 40dp 间隙）；
+        // 横屏用户要求压到屏幕最底部（16dp）——搜索栏在卡片上方保持可见，可拖动微调
         val landscape = resources.configuration.orientation ==
             android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        uiState.value = uiState.value.copy(floatingOffsetY = if (landscape) 200 else 320)
+        uiState.value = uiState.value.copy(floatingOffsetY = if (landscape) 16 else 320)
         mainHandler.post {
             // 英文组合区先定格（字符保留），再走中文 composing 清理；
             // 并清英文镜像——搜索期间字母经 commitTextSilently 重定向进搜索词，
@@ -3478,6 +3478,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     internal fun commitTextSilently(text: String, isPaste: Boolean = false) {
+        android.util.Log.i(
+            "XimeTap",
+            "silentCommit '$text' paste=$isPaste search=${keyboardViewModel.clipboardSearchFocused.value} qsForm=${uiState.value.quickSendFormFocused} panel=${uiState.value.toolPanelInputFocused} terminal=$editorTerminal"
+        )
         // 剪贴板搜索聚焦：上屏文本进搜索词（不进输入框、不触发联想）
         if (keyboardViewModel.clipboardSearchFocused.value) {
             keyboardViewModel.appendClipboardSearch(text)

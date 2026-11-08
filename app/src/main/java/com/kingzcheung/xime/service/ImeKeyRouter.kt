@@ -1638,6 +1638,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     }
 
     internal fun selectCandidate(index: Int) {
+        android.util.Log.i(
+            "XimeTap",
+            "selectCandidate idx=$index candidates=${service.candidateState.value.candidates.size} assoc=${service.candidateState.value.associationCandidates.size} pending='${service.candidateState.value.pendingEnglishText}'"
+        )
         service.composeViewRef?.let { service.feedbackManager.performKeyPressEffect(view = it) }
 
         // 计算器模式（仅在数字/常用符号键盘下生效，防止状态残留导致其他键盘候选词点击异常）
