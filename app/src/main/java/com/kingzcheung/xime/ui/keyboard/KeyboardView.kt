@@ -480,6 +480,7 @@ fun KeyboardView(
                             ToolbarButton.FLOAT -> ({ callbacks.onFloatingModeChange?.invoke(!state.isFloatingMode) })
                             ToolbarButton.HANDWRITING_LOOKUP -> ({ isHandwritingLookup = !isHandwritingLookup })
                             ToolbarButton.EDIT -> ({ viewModel.showOverlay(OverlayRoute.Edit) })
+                            ToolbarButton.TERMINAL_QUICK_SEND -> ({ callbacks.onTerminalQuickSendToggle?.invoke() })
                             ToolbarButton.VOICE -> ({
                                 if (PermissionHelper.hasRecordAudioPermission(toolbarContext)) {
                                     callbacks.onVoiceStickyToggle?.invoke()

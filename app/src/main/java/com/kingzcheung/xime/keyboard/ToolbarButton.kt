@@ -16,6 +16,7 @@ import androidx.compose.material.icons.twotone.LastPage
 import androidx.compose.material.icons.twotone.Paid
 import androidx.compose.material.icons.twotone.Quickreply
 import androidx.compose.material.icons.twotone.SelectAll
+import androidx.compose.material.icons.twotone.Terminal
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Mic
@@ -43,7 +44,8 @@ enum class ToolbarButton(
     END("end", tr(R.string.s_duanwei), Icons.AutoMirrored.TwoTone.LastPage),
     HANDWRITING_LOOKUP("handwriting_lookup", tr(R.string.s_shouxiezhaozi), Icons.Outlined.Gesture),
     EDIT("edit", tr(R.string.s_bianji), Icons.TwoTone.Edit),
-    VOICE("voice", tr(R.string.s_yuyin), Icons.TwoTone.Mic);
+    VOICE("voice", tr(R.string.s_yuyin), Icons.TwoTone.Mic),
+    TERMINAL_QUICK_SEND("terminal_quick_send", tr(R.string.s_zhongduankuaijie), Icons.TwoTone.Terminal);
 
     companion object {
         val DEFAULT_VISIBLE = emptySet<ToolbarButton>()

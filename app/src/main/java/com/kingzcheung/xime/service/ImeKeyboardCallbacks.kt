@@ -106,16 +106,34 @@ internal fun rememberImeKeyboardCallbacks(
                             // service 层重定向，避免编码回删/替换作用到错误的屏上文本。
                             var replaced = service.replaceBeforeCursor(pendingEnglish, text)
                             if (!replaced) {
-                                // 仅"读不到前文"（WebView/终端，探针为 null）才按长度盲删——
-                                // 编码是本输入法逐字上屏的可信回删；读得到但不匹配 = 光标已被
-                                // 用户移动，盲删必删错——降级纯追加
+                                // 盲删降级三态（与 commitPluginCandidate 同口径）：
+                                // - 终端（TYPE_NULL）：deleteSurroundingText 兼容性差（常返回
+                                //   空串/空操作），改发 DEL 键事件——终端必响应物理退格
+                                // - 其他读不到前文的宿主（WebView，探针 null/空串）：按长度
+                                //   deleteSurroundingText（编码是本输入法逐字上屏的可信回删）
+                                // - 前文读得到但不匹配 = 光标已被用户移动，盲删必删错——纯追加
                                 val ic = service.currentInputConnection
-                                val beforeReadable = runCatching {
-                                    ic?.getTextBeforeCursor(pendingEnglish.length, 0) != null
-                                }.getOrDefault(false)
-                                if (!beforeReadable && ic?.deleteSurroundingText(pendingEnglish.length, 0) == true) {
-                                    service.commitText(text)
-                                    replaced = true
+                                val before = runCatching {
+                                    ic?.getTextBeforeCursor(pendingEnglish.length, 0)?.toString()
+                                }.getOrNull()
+                                when {
+                                    service.isTerminalEditor() -> {
+                                        repeat(pendingEnglish.length) {
+                                            service.sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DEL)
+                                        }
+                                        service.commitText(text)
+                                        replaced = true
+                                    }
+                                    before.isNullOrEmpty() && ic?.deleteSurroundingText(pendingEnglish.length, 0) == true -> {
+                                        service.commitText(text)
+                                        replaced = true
+                                    }
+                                    else -> {
+                                        FileLogger.d(
+                                            XimeInputMethodService.TAG,
+                                            "english candidate replace: 前文可读但不匹配（光标已移动），降级纯追加"
+                                        )
+                                    }
                                 }
                             }
                             if (!replaced) {
@@ -275,6 +293,9 @@ internal fun rememberImeKeyboardCallbacks(
                     service.finishEnglishComposition()
                     service.voiceRecognitionHandler.startRecognition()
                 }
+            },
+            onTerminalQuickSendToggle = {
+                service.toggleTerminalQuickSend()
             },
             onPageDown = { service.keyRouter.pageDown() },
             onPageUp = { service.keyRouter.pageUp() },

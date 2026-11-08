@@ -1488,22 +1488,31 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }
                 return
             }
-            // replaceBeforeCursor 失败后区分两态：仅"读不到前文"（WebView/终端，
-            // getTextBeforeCursor 为 null）才按长度盲删——编码是本输入法逐字上屏的可信回删；
-            // 读得到但不匹配 = 光标已被用户移动，盲删必删错——降级纯追加
-            val beforeReadable = withContext(Dispatchers.Main) {
-                runCatching {
-                    service.currentInputConnection?.getTextBeforeCursor(pending.length, 0) != null
-                }.getOrDefault(false)
-            }
-            if (beforeReadable) {
-                FileLogger.w(
-                    XimeInputMethodService.TAG,
-                    "commitPluginCandidate: 前文可读但不匹配（光标已移动），降级纯追加"
-                )
-            } else {
-                withContext(Dispatchers.Main) {
-                    runCatching { service.currentInputConnection?.deleteSurroundingText(pending.length, 0) }
+            // replaceBeforeCursor 失败后按宿主类型降级：
+            // - 终端（TYPE_NULL）：deleteSurroundingText 兼容性差（Termux 返回空串/空操作），
+            //   改发 DEL 键事件——终端必响应物理退格（与输入法自身退格同一路径，实测删得动）
+            // - 其他读不到前文的宿主（WebView，探针 null/空串）：按长度 deleteSurroundingText
+            //   （编码是本输入法逐字上屏的可信回删）
+            // - 前文读得到但不匹配 = 光标已被用户移动，盲删必删错——降级纯追加
+            withContext(Dispatchers.Main) {
+                val before = runCatching {
+                    service.currentInputConnection?.getTextBeforeCursor(pending.length, 0)?.toString()
+                }.getOrNull()
+                when {
+                    service.isTerminalEditor() -> {
+                        repeat(pending.length) {
+                            service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                        }
+                    }
+                    before.isNullOrEmpty() -> {
+                        runCatching { service.currentInputConnection?.deleteSurroundingText(pending.length, 0) }
+                    }
+                    else -> {
+                        FileLogger.w(
+                            XimeInputMethodService.TAG,
+                            "commitPluginCandidate: 前文可读但不匹配（光标已移动），降级纯追加"
+                        )
+                    }
                 }
             }
         }

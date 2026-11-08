@@ -246,7 +246,7 @@ fun SmartPredictionSettingsContent(
                 }
             }
 
-            // 终端输入框快捷发送：独立于智能联想开关（快捷发送命中走内置词库，不依赖联想模型）
+            // 终端类输入框快捷发送：独立于智能联想开关（快捷发送命中走内置词库，不依赖联想模型）
             item {
                 var terminalQuickSend by remember {
                     mutableStateOf(SettingsPreferences.isTerminalQuickSendEnabled(context))

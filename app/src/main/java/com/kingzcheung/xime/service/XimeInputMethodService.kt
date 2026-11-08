@@ -3128,6 +3128,29 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     internal fun englishCandidatesAllowed(): Boolean =
         !editorSecret || terminalQuickSendEnabled()
 
+    /** 当前是否终端类输入框（TYPE_NULL，如 Termux/ZeroTermux——同类型输入框通用，非 Termux 专属）。 */
+    internal fun isTerminalEditor(): Boolean = editorTerminal
+
+    /** 工具栏/设置页切换终端类输入框快捷发送开关（闸门每次实时读 prefs，即切即生效）。 */
+    internal fun toggleTerminalQuickSend() {
+        val new = !SettingsPreferences.isTerminalQuickSendEnabled(this)
+        SettingsPreferences.setTerminalQuickSendEnabled(this, new)
+        // 切换后立即刷新候选栏：按旧开关状态算出的快捷发送/联想候选不停留
+        candidateState.value = candidateState.value.copy(
+            candidates = emptyList(),
+            candidateComments = emptyList(),
+            candidateActions = emptyList(),
+            associationCandidates = emptyList()
+        )
+        updateUI()
+        android.widget.Toast.makeText(
+            this,
+            if (new) tr(R.string.s_zhongduanleikuaijiefasongyikaiqi)
+            else tr(R.string.s_zhongduanleikuaijiefasongyiguanbi),
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+
     /**
      * 英文候选替换总能力：组合区承载优先（宿主无关——commitText 整体替换组合区
      * 不依赖读前文），回退直传模式按旧探针判定，终端按开关（盲删兜底）。

@@ -45,6 +45,8 @@ data class KeyboardCallbacks(
     val onCommitImage: ((String) -> Unit)? = null,
     val onVoiceModeChange: ((Boolean) -> Unit)? = null,
     val onVoiceStickyToggle: (() -> Unit)? = null,
+    /** 终端类输入框快捷发送开关快速切换（工具栏按钮） */
+    val onTerminalQuickSendToggle: (() -> Unit)? = null,
     val onPageDown: (() -> Unit)? = null,
     val onPageUp: (() -> Unit)? = null,
     val onCursorMove: ((Int) -> Unit)? = null,

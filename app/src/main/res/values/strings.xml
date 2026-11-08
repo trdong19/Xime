@@ -892,9 +892,12 @@
     <string name="s_weijiancedaomoxingwenjian_qing_6a5a6">未检测到模型文件，请先下载模型</string>
     <string name="s_lianxiangxingwei">联想行为</string>
     <string name="s_konggeshangpinglianxianghouxuan">空格上屏联想候选</string>
-    <string name="s_zhongduanshurukuaiikuaijiefasong">终端输入框快捷发送</string>
-    <string name="s_zaizhongduanshurukuangliyong">在 Termux 等终端输入框启用</string>
-    <string name="s_zaitermuxdengzhongduanshurukuang_xian_9c21a">在 Termux 等终端输入框显示快捷发送/英文联想候选。终端不支持读取光标前文本，移动过终端光标后点候选可能删错字符，默认关闭</string>
+    <string name="s_zhongduanshurukuaiikuaijiefasong">终端类输入框快捷发送</string>
+    <string name="s_zaizhongduanshurukuangliyong">在终端类输入框（Termux 等）启用</string>
+    <string name="s_zaitermuxdengzhongduanshurukuang_xian_9c21a">对 Termux 等终端类输入框生效（同类型输入框通用，非 Termux 专属）；开启后显示快捷发送/英文联想候选。此类输入框读不到光标前文本，移动过光标后点候选可能删错字符，默认关闭</string>
+    <string name="s_zhongduankuaijie">终端快捷发送</string>
+    <string name="s_zhongduanleikuaijiefasongyikaiqi">终端类输入框快捷发送已开启</string>
+    <string name="s_zhongduanleikuaijiefasongyiguanbi">终端类输入框快捷发送已关闭</string>
     <string name="s_youlianxianghouxuanshi_ankongg_00102">有联想候选时，按空格键直接上屏第一个联想词</string>
     <string name="s_lianxulianxiang">连续联想</string>
     <string name="s_lianxiangcishangpinghoujixutui_d319f">联想词上屏后继续推理，可连续空格上屏联想词</string>
