@@ -54,6 +54,7 @@ object SettingsPreferences {
     private const val KEY_PREDICTION_SELECTED_MODEL = "prediction_selected_model"
     private const val KEY_SPACE_COMMIT_ASSOCIATION = "space_commit_association"
     private const val KEY_TERMINAL_QUICK_SEND = "terminal_quick_send_enabled"
+    private const val KEY_FLOATING_OPACITY = "floating_opacity"
     private const val KEY_ASSOCIATION_SINGLE_MODE = "association_single_mode"
     
     const val KEY_STT_ENABLED = "stt_enabled"
@@ -577,6 +578,18 @@ object SettingsPreferences {
 
     fun setTerminalQuickSendEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_TERMINAL_QUICK_SEND, enabled).apply()
+    }
+
+    /**
+     * 悬浮键盘卡片不透明度（30~100，100=完全不透明）。默认 100：平时打字不受影响；
+     * 横屏剪贴板搜索等场景用户自行拉低，透出键盘下方内容（拖动键盘让位后可点选）。
+     */
+    fun getFloatingOpacity(context: Context): Int {
+        return getPrefs(context).getInt(KEY_FLOATING_OPACITY, 100).coerceIn(30, 100)
+    }
+
+    fun setFloatingOpacity(context: Context, opacity: Int) {
+        getPrefs(context).edit().putInt(KEY_FLOATING_OPACITY, opacity.coerceIn(30, 100)).apply()
     }
 
     /**

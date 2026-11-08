@@ -76,5 +76,7 @@ fun isBuiltinToolbarButtonAvailable(
 
 data class ToolbarAction(
     val item: ToolbarButtonItem,
+    /** 开关型按钮的当前状态（如终端快捷发送）：true = 高亮着色 */
+    val isActive: Boolean = false,
     val onClick: () -> Unit
 )

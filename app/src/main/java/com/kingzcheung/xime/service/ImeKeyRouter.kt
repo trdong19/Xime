@@ -346,6 +346,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 if (service.isEnglishComposing()) {
                                     service.discardEnglishComposition()
                                     true
+                                } else if (service.isTerminalEditor()) {
+                                    // 终端：读不到前文无法校验，但 pending 是曦码逐字直传的
+                                    //（影子账本同源）——按长度发退格键删除
+                                    repeat(pendingEnglish.length) {
+                                        service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                                    }
+                                    true
                                 } else {
                                     val ic = service.currentInputConnection ?: return@withContext false
                                     val before = runCatching {
@@ -354,14 +361,18 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                     before == pendingEnglish && ic.deleteSurroundingText(pendingEnglish.length, 0)
                                 }
                             }
-                            if (removed) service.recordCleared(pendingEnglish)
-                        } else {
-                            // 撤回重放用 inputText（原始键入串）：preeditText 现为带回显分隔符的
-                            // 展示串（如 ni'hao），上屏必须无分隔符版本。T9 时 inputText 为合成显示态，
-                            // 与 preeditText 同值，行为不变。
-                            service.recordCleared(candState.inputText)
-                        }
-                        clearInputStateForKeys()
+                            if (removed) {
+                                // 先清 pending 再记撤回：recordCleared 有"pending 非空拒绝"闸门，
+                                // 先记会被闸掉（终端/直传态清空英文后下滑撤回失效的既有缺口，本版补上）
+                                clearInputStateForKeys()
+                                service.recordCleared(pendingEnglish)
+                            } else {
+                                // 撤回重放用 inputText（原始键入串）：preeditText 现为带回显分隔符的
+                                // 展示串（如 ni'hao），上屏必须无分隔符版本。T9 时 inputText 为合成显示态，
+                                // 与 preeditText 同值，行为不变。
+                                service.recordCleared(candState.inputText)
+                                clearInputStateForKeys()
+                            }
                     } else {
                         // 空闲态：清空输入框全部已上屏文本。
                         service.calculatorEngine.clear()
@@ -372,7 +383,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         val codeInInputBox = SettingsPreferences.getInputTextLocation(service) ==
                             SettingsPreferences.INPUT_TEXT_INPUT_BOX
                         val inputFieldText = withContext(Dispatchers.Main) {
-                            service.currentInputConnection?.getTextBeforeCursor(XimeInputMethodService.SAFE_TEXT_LIMIT, 0)?.toString() ?: ""
+                            if (service.isTerminalEditor()) {
+                                // 终端：读不到前文，用影子账本（经曦码上屏的全部内容）
+                                service.terminalShadowTailForClear()
+                            } else {
+                                service.currentInputConnection?.getTextBeforeCursor(XimeInputMethodService.SAFE_TEXT_LIMIT, 0)?.toString() ?: ""
+                            }
                         }
                         service.recordCleared(
                             when {
@@ -399,7 +415,15 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 // 删除输入框中所有文字
                                 val textLen = inputFieldText.length
                                 if (textLen > 0) {
-                                    it.deleteSurroundingText(textLen, 0)
+                                    if (service.isTerminalEditor()) {
+                                        // 终端：deleteSurroundingText 无效，发退格键
+                                        //（影子账本随 DEL 钩子同步扣减）
+                                        repeat(textLen) {
+                                            service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                                        }
+                                    } else {
+                                        it.deleteSurroundingText(textLen, 0)
+                                    }
                                 }
                             }
                         }
@@ -429,6 +453,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 // 传 text.length 会被 clamp 到整段文本末尾。
                                 service.noteSelfWriteCaretDelta(text.length)
                                 ic.commitText(text, 1)
+                                // 终端：撤回回插的内容同步入账（影子账本与屏幕保持同源）
+                                service.noteTerminalCommit(text)
                             }
                         }
                     }
@@ -731,7 +757,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                     val committed = result.committedText
                                     if (state.isAsciiMode && committed.isNotEmpty() && result.inputText.isEmpty() && result.candidates.isEmpty()) {
                                         val newPending = candState.pendingEnglishText + committed
-                                        android.util.Log.i("XimeTap", "letter→A rime直传 committed='$committed' pending='$newPending'")
+                                        service.tapVerboseLog("letter→A rime直传 committed='$committed' pending='$newPending'")
                                         // 英文组合区承载：整段 pending 写入 composing region（点选候选时
                                         // commitText 自动整体替换，零回删）；宿主拒绝或内部输入态
                                         // （搜索/面板/表单聚焦，文本经 commitTextSilently 重定向）时回退直传。
@@ -747,7 +773,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                         }
                                         sendTransformedResult(result) { if (service.calculatorEngine.isActive()) updateCalculatorCandidates() }
                                     } else {
-                                        android.util.Log.i("XimeTap", "letter→C rime组合提交 committed='$committed' input='${result.inputText}' cands=${result.candidates.size}（此路径不积累 pending！）")
+                                        service.tapVerboseLog("letter→C rime组合提交 committed='$committed' input='${result.inputText}' cands=${result.candidates.size}（此路径不积累 pending！）")
                                         if (committed.isNotEmpty()) {
                                             withContext(Dispatchers.Main) { service.commitText(committed) }
                                         }
@@ -764,7 +790,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                                         // 宿主拒绝或内部输入态（搜索/面板/表单聚焦）时回退直传。
                                                         // 镜像更新与组合区写入同在主线程串行（防定格分支竞态回写旧镜像）。
                                                         withContext(Dispatchers.Main) {
-                                                            android.util.Log.i("XimeTap", "letter→B 直传 char='$charToCommit' pending='$newPending'")
+                                                            service.tapVerboseLog("letter→B 直传 char='$charToCommit' pending='$newPending'")
                                                             if (service.writeEnglishComposition(newPending)) {
                                                                 service.noteSelfWriteCaretDelta(charToCommit.length)
                                                             } else {
@@ -1260,9 +1286,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             // 防御：中英/方案切换后引擎组合已清空但 candidateState 残留旧候选+actions，
             // 此时点选必须回落原生路径（引擎侧 selectCandidate 失败自动防呆，与旧行为一致），
             // 否则残留插件候选会绕过引擎校验直接上屏。
+            // 例外（2026-11-09 XimeTap 日志实证）：终端直传模式（TYPE_NULL+开关）引擎永远
+            // 无组合（字母逐字直传），快捷发送候选是本次按键刚注入的新鲜条目而非残留——
+            // 不放开的话点选会落进 T9 full-commit 纯追加路径（clclaude code），
+            // 绕过终端 DEL 盲删替换。
+            val terminalDirectMode = service.isTerminalEditor() && service.englishCandidatesAllowed()
             val engineHasComposition = service.rimeEngine.getInput().isNotEmpty() ||
                 service.rimeEngine.getCandidates().isNotEmpty()
-            if (engineHasComposition) {
+            if (engineHasComposition || terminalDirectMode) {
                 commitPluginCandidate(pendingAction.commitText)
                 return
             }
@@ -1455,9 +1486,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         // 用 replaceBeforeCursor 带落点校验：光标位置与编码不对应（用户移动过光标）
         // 时放弃替换降级为直接追加，避免误删用户文本
         val pending = service.candidateState.value.pendingEnglishText
-        android.util.Log.i(
-            "XimeTap",
-            "pluginCommit text='$text' pending='$pending' composing=${service.isEnglishComposing()} terminal=${service.isTerminalEditor()}"
+        service.tapVerboseLog("pluginCommit text='$text' pending='$pending' composing=${service.isEnglishComposing()} terminal=${service.isTerminalEditor()}"
         )
         if (pending.isNotEmpty() && text.startsWith(pending)) {
             // 先清编码记录：commitTextSilently 的回删依据 pendingEnglish，
@@ -1507,7 +1536,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }.getOrNull()
                 when {
                     service.isTerminalEditor() -> {
-                        android.util.Log.i("XimeTap", "pluginCommit → 终端 DEL×${pending.length}")
+                        service.tapVerboseLog("pluginCommit → 终端 DEL×${pending.length}")
                         repeat(pending.length) {
                             service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
                         }
@@ -1638,9 +1667,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     }
 
     internal fun selectCandidate(index: Int) {
-        android.util.Log.i(
-            "XimeTap",
-            "selectCandidate idx=$index candidates=${service.candidateState.value.candidates.size} assoc=${service.candidateState.value.associationCandidates.size} pending='${service.candidateState.value.pendingEnglishText}'"
+        service.tapVerboseLog("selectCandidate idx=$index candidates=${service.candidateState.value.candidates.size} assoc=${service.candidateState.value.associationCandidates.size} pending='${service.candidateState.value.pendingEnglishText}'"
         )
         service.composeViewRef?.let { service.feedbackManager.performKeyPressEffect(view = it) }
 
@@ -1672,6 +1699,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             ic.deleteSurroundingText(expression.length, 0)
                             // 提交选中的文本
                             ic.commitText(textToCommit, textToCommit.length)
+                            // 终端：计算器结果同步入账（直写 IC 不经 commitTextSilently）
+                            service.noteTerminalCommit(textToCommit)
                         }
                         service.candidateState.value = CandidateState()
                     }

@@ -58,6 +58,10 @@ data class InputUIState(
     val toolbarPluginButtons: List<ToolbarButtonItem.Plugin> = emptyList(),
     val isCompact: Boolean = false,
     val isFloatingMode: Boolean = false,
+    /** 终端类输入框快捷发送开关（工具栏按钮亮/灭着色用） */
+    val isTerminalQuickSendOn: Boolean = false,
+    /** 悬浮键盘卡片不透明度（30~100，100=完全不透明） */
+    val floatingOpacity: Int = 100,
     val floatingOffsetX: Int = 0,
     val floatingOffsetY: Int = 0,
     val cursorX: Int = 0,

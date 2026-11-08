@@ -576,7 +576,12 @@ fun CandidateBar(
                                     ) {
                                         ToolbarButtonIcon(
                                             item = action.item,
-                                            tint = if (isPressed) iconButtonTint.copy(alpha = 0.6f) else iconButtonTint,
+                                            // 开关型按钮激活态用主题强调色（如终端快捷发送开启）
+                                            tint = when {
+                                                action.isActive -> visuals.accentColor
+                                                isPressed -> iconButtonTint.copy(alpha = 0.6f)
+                                                else -> iconButtonTint
+                                            },
                                             modifier = Modifier.size(IconButtonGlyphSize),
                                         )
                                     }

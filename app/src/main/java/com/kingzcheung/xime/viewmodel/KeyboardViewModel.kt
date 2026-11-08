@@ -60,6 +60,10 @@ data class KeyboardUiState(
     val isDarkTheme: Boolean = false,
     val darkMode: Int = 2,
     val themeId: String = "ocean_blue",
+    /** 终端类输入框快捷发送开关（工具栏按钮亮/灭着色用） */
+    val isTerminalQuickSendOn: Boolean = false,
+    /** 悬浮键盘卡片不透明度（30~100，100=完全不透明） */
+    val floatingOpacity: Int = 100,
     val keyboardHeightDp: Int = 0,
     val keyboardBottomPaddingDp: Int = 0,
     val isDeploying: Boolean = false,

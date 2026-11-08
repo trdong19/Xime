@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -276,7 +277,22 @@ fun KeyboardView(
     var measuredWidthDp by remember { mutableIntStateOf(0) }
 
     val contentModifier = if (state.isFloatingMode) {
-        modifier.keyboardBackground(themeScheme.keyboardBackground, state.isDarkTheme, keyboardBgColor)
+        // 悬浮键盘低于 100% 不透明时描细边框标出卡片边界；整卡淡出（含拖动条）
+        // 由 FloatingKeyboardContainer 的 opacityFraction 施加
+        val opacityFraction = state.floatingOpacity.coerceIn(30, 100) / 100f
+        modifier
+            .keyboardBackground(themeScheme.keyboardBackground, state.isDarkTheme, keyboardBgColor)
+            .then(
+                if (opacityFraction < 1f) {
+                    Modifier.border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.8f),
+                        RoundedCornerShape(16.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            )
     } else {
         // 非浮动模式：渐变背景由 XimeInputMethodService 外层 Box 统一绘制（含导航栏区，
         // 保证延伸到屏幕底部时渐变连续），此处不再叠加第二层背景。
@@ -496,7 +512,13 @@ fun KeyboardView(
                             }
                         })
                     }
-                    ToolbarAction(item) {
+                    ToolbarAction(
+                        item,
+                        // 开关型按钮的激活态着色（终端快捷发送开启时高亮）
+                        isActive = item is ToolbarButtonItem.Builtin &&
+                            item.button == ToolbarButton.TERMINAL_QUICK_SEND &&
+                            state.isTerminalQuickSendOn,
+                    ) {
                         onHapticFeedback?.invoke()
                         onClick()
                     }

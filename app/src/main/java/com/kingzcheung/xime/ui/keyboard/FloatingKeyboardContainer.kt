@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -49,6 +50,8 @@ fun FloatingKeyboardContainer(
     offsetX: Int,
     offsetY: Int,
     backgroundColor: Color = Color.Transparent,
+    /** 卡片不透明度（0.3~1.0）：设置可调，含拖动条与背景一起淡出；1.0=完全不透明 */
+    opacityFraction: Float = 1f,
     onDrag: (dx: Float, dy: Float) -> Unit,
     onDragEnd: () -> Unit,
     onCardPositioned: (left: Int, top: Int, right: Int, bottom: Int) -> Unit = { _: Int, _: Int, _: Int, _: Int -> },
@@ -73,6 +76,7 @@ fun FloatingKeyboardContainer(
                 .offset(x = offsetX.dp, y = (-offsetY).dp)
                 .shadow(12.dp, RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
+                .alpha(opacityFraction)
                 .onGloballyPositioned { coords ->
                     val pos = coords.positionInWindow()
                     val size = coords.size

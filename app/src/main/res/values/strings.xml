@@ -898,6 +898,9 @@
     <string name="s_zhongduankuaijie">终端快捷发送</string>
     <string name="s_zhongduanleikuaijiefasongyikaiqi">终端类输入框快捷发送已开启</string>
     <string name="s_zhongduanleikuaijiefasongyiguanbi">终端类输入框快捷发送已关闭</string>
+    <string name="s_xuanfujianpan">悬浮键盘</string>
+    <string name="s_xuanfujianpanbutoumingdu">悬浮键盘不透明度</string>
+    <string name="s_ladihouketouchujianpanxiafangn_8a11c">拉低后可透出键盘下方内容（横屏剪贴板搜索建议 50%~60%），低于 100% 时显示卡片边框；默认 100%（完全不透明）</string>
     <string name="s_youlianxianghouxuanshi_ankongg_00102">有联想候选时，按空格键直接上屏第一个联想词</string>
     <string name="s_lianxulianxiang">连续联想</string>
     <string name="s_lianxiangcishangpinghoujixutui_d319f">联想词上屏后继续推理，可连续空格上屏联想词</string>

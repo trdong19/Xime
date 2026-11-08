@@ -619,6 +619,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             resizePreviewMarginEndDp = uiState.value.resizePreviewMarginEndDp.coerceIn(0, maxMargin),
             toolbarButtons = SettingsPreferences.getToolbarButtons(this),
             isFloatingMode = isFloatingMode,
+            isTerminalQuickSendOn = SettingsPreferences.isTerminalQuickSendEnabled(this),
+            floatingOpacity = SettingsPreferences.getFloatingOpacity(this),
             floatingOffsetX = clampedX,
             floatingOffsetY = clampedY,
         )
@@ -635,6 +637,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 "floating_mode", "floating_mode_landscape" -> {
                     loadDarkModePreference()
                     applyWindowBackground()
+                }
+                "floating_opacity" -> {
+                    uiState.value = uiState.value.copy(
+                        floatingOpacity = SettingsPreferences.getFloatingOpacity(this)
+                    )
                 }
                 "stt_enabled" -> {
                     val sttEnabled = SettingsPreferences.isSttEnabled(this@XimeInputMethodService)
@@ -1329,6 +1336,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 追加/替换选区语义：定格英文组合区+清镜像（防整体替换丢已敲字母）
         finishEnglishComposition()
         ic.commitText(text, 1)
+        noteTerminalCommit(text)
         clearEnglishMirrorAfterAppend()
         if (isChineseMode) {
             predictionManager.appendCommittedText(text)
@@ -1805,6 +1813,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     enterKeyText = state.enterKeyText,
                                     isDarkTheme = isDarkTheme,
                                     darkMode = state.darkMode,
+                                    isTerminalQuickSendOn = state.isTerminalQuickSendOn,
+                                    floatingOpacity = state.floatingOpacity,
                                     themeId = state.themeId,
                                     keyboardHeightDp = effectiveKeyboardHeight,
                                     keyboardBottomPaddingDp = state.keyboardBottomPaddingDp,
@@ -2271,6 +2281,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return
         }
         val ic = currentInputConnection ?: return
+        // 终端类宿主：getExtractedText 不可用（读不到文本），改发 HOME/END 键事件
+        //（Termux 认这两个键 = 当前输入行行首/行尾，与其扩展键栏 HOME/END 同源）
+        if (editorTerminal) {
+            sendDownUpKeyEvents(
+                if (toEnd) KeyEvent.KEYCODE_MOVE_END else KeyEvent.KEYCODE_MOVE_HOME
+            )
+            endEnglishRoundOnCaretMove()
+            return
+        }
         val req = android.view.inputmethod.ExtractedTextRequest()
         val extracted = try { ic.getExtractedText(req, 0) } catch (_: Exception) { null } ?: return
         val text = extracted.text?.toString() ?: return
@@ -2325,6 +2344,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             // 追加语义：定格英文组合区+清镜像后上屏（防整体替换丢已敲字母）
             finishEnglishComposition()
             currentInputConnection?.commitText(lastText, 1)
+            noteTerminalCommit(lastText)
             clearEnglishMirrorAfterAppend()
         }
     }
@@ -2361,6 +2381,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             // 拒绝标记也复位——新编辑框重新尝试组合区承载。
             englishComposingActive = false
             englishCompositionRejected = false
+            // 终端影子账本随编辑框重置（账本只对当前编辑框有效）
+            terminalShadowClear()
         } else {
             // 同编辑框重启：组合区可能仍存活于宿主（未被定稿）——定格保留字符
             //（幂等安全），防止镜像被 CandidateState() 清掉后下个字母整体替换存活组合区丢字母
@@ -3131,7 +3153,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     /** 当前是否终端类输入框（TYPE_NULL，如 Termux/ZeroTermux——同类型输入框通用，非 Termux 专属）。 */
     internal fun isTerminalEditor(): Boolean = editorTerminal
 
-    /** 工具栏/设置页切换终端类输入框快捷发送开关（闸门每次实时读 prefs，即切即生效）。 */
+    /** 诊断日志（tag=XimeTap）：默认静默，仅设置里的详细日志开关打开时输出到 logcat。 */
+    internal fun tapVerboseLog(message: String) {
+        if (SettingsPreferences.isVerboseLoggingEnabled(this)) {
+            android.util.Log.i("XimeTap", message)
+        }
+    }
+
+    /** 工具栏/设置页切换终端类输入框快捷发送开关（闸门每次实时读 prefs，即切即生效）。
+     *  反馈 = 工具栏按钮亮/灭着色（isTerminalQuickSendOn），不依赖 Toast（MIUI 可能吞）。 */
     internal fun toggleTerminalQuickSend() {
         val new = !SettingsPreferences.isTerminalQuickSendEnabled(this)
         SettingsPreferences.setTerminalQuickSendEnabled(this, new)
@@ -3142,13 +3172,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             candidateActions = emptyList(),
             associationCandidates = emptyList()
         )
+        uiState.value = uiState.value.copy(isTerminalQuickSendOn = new)
         updateUI()
-        android.widget.Toast.makeText(
-            this,
-            if (new) tr(R.string.s_zhongduanleikuaijiefasongyikaiqi)
-            else tr(R.string.s_zhongduanleikuaijiefasongyiguanbi),
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
     }
 
     /**
@@ -3478,9 +3503,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     internal fun commitTextSilently(text: String, isPaste: Boolean = false) {
-        android.util.Log.i(
-            "XimeTap",
-            "silentCommit '$text' paste=$isPaste search=${keyboardViewModel.clipboardSearchFocused.value} qsForm=${uiState.value.quickSendFormFocused} panel=${uiState.value.toolPanelInputFocused} terminal=$editorTerminal"
+        tapVerboseLog("silentCommit '$text' paste=$isPaste search=${keyboardViewModel.clipboardSearchFocused.value} qsForm=${uiState.value.quickSendFormFocused} panel=${uiState.value.toolPanelInputFocused} terminal=$editorTerminal"
         )
         // 剪贴板搜索聚焦：上屏文本进搜索词（不进输入框、不触发联想）
         if (keyboardViewModel.clipboardSearchFocused.value) {
@@ -3517,6 +3540,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         // 上屏会让光标前进 text.length，属自身写入
         selfWriteCaret.noteWrite(text.length, android.os.SystemClock.uptimeMillis())
+        // 终端影子账本：真实上屏的内容同步入账（内部编辑器重定向分支已在上方 return）
+        terminalShadowAppend(text)
         currentInputConnection?.commitText(text, 1)
 
         // text_committed 事件：真实上屏才累计/投递（内部编辑器分支已在上方 return；
@@ -3549,10 +3574,59 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     // 由既有 undo_clear 分支回插，不改动撤回通道本身。
 
     /** 编码串是否显示在输入框内（候选栏模式需单独记编码，输入框模式已含在文本差里）。 */
-    /** 读取光标前文本（受限窗口，见 [UNDO_TEXT_WINDOW]）。需主线程；读不到返回 null。 */
-    private fun readTextBeforeCursorWindowed(): String? = runCatching {
-        currentInputConnection?.getTextBeforeCursor(UNDO_TEXT_WINDOW, 0)?.toString()
-    }.getOrNull()
+
+    // ── 终端影子账本（TYPE_NULL 宿主：读不到前文/deleteSurroundingText 无效）──
+    // 只记经曦码上屏的文本。Tab 补全/粘贴/shell 输出等非曦码内容不在账上，
+    // 对这些内容删除/撤回的落点会数不准（终端读不到屏幕无法校验，固有天花板）。
+    private val terminalShadow = StringBuilder()
+    private val terminalShadowLock = Any()
+
+    /** 影子账本容量（字符）：超限丢最旧的，覆盖"清空→撤回"所需的足够回溯窗口。 */
+    private val terminalShadowCap = 2000
+
+    private fun terminalShadowAppend(text: String) {
+        if (!editorTerminal || text.isEmpty()) return
+        synchronized(terminalShadowLock) {
+            terminalShadow.append(text)
+            if (terminalShadow.length > terminalShadowCap) {
+                terminalShadow.delete(0, terminalShadow.length - terminalShadowCap)
+            }
+        }
+    }
+
+    /** 直写 InputConnection 的路径（undo_clear 回插/面板条目/重复上屏）同步入账。 */
+    internal fun noteTerminalCommit(text: String) {
+        terminalShadowAppend(text)
+    }
+
+    /** clear_all 空闲态清空用：影子账本全部内容（终端读不到前文，账本即屏幕同源记录）。 */
+    internal fun terminalShadowTailForClear(): String = terminalShadowTail(terminalShadowCap)
+
+    private fun terminalShadowTrim(count: Int) {
+        if (!editorTerminal || count <= 0) return
+        synchronized(terminalShadowLock) {
+            val n = minOf(count, terminalShadow.length)
+            terminalShadow.delete(terminalShadow.length - n, terminalShadow.length)
+        }
+    }
+
+    private fun terminalShadowTail(maxChars: Int): String = synchronized(terminalShadowLock) {
+        if (terminalShadow.length <= maxChars) terminalShadow.toString()
+        else terminalShadow.substring(terminalShadow.length - maxChars)
+    }
+
+    private fun terminalShadowClear() = synchronized(terminalShadowLock) {
+        terminalShadow.setLength(0)
+    }
+
+    /** 读取光标前文本（受限窗口，见 [UNDO_TEXT_WINDOW]）。需主线程；读不到返回 null。
+     *  终端类宿主读不到 → 返回影子账本尾部（账本与屏幕同源：追加/扣减随上屏/退格同步）。 */
+    private fun readTextBeforeCursorWindowed(): String? {
+        if (editorTerminal) return terminalShadowTail(UNDO_TEXT_WINDOW)
+        return runCatching {
+            currentInputConnection?.getTextBeforeCursor(UNDO_TEXT_WINDOW, 0)?.toString()
+        }.getOrNull()
+    }
 
     /**
      * 删除会话开始：快照光标前文本与（候选栏模式下的）编码串。
@@ -3837,6 +3911,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             }
             return
         }
+        // 终端类宿主：deleteSurroundingText 无效（Termux 空操作），改发退格键
+        //（终端必响应物理退格；影子账本在 sendDownUpKeyEvents 的 DEL 钩子里同步扣减）
+        if (editorTerminal) {
+            repeat(count) { sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL) }
+            return
+        }
         // 删除会让光标后退 count，属自身写入
         selfWriteCaret.noteWrite(-count, android.os.SystemClock.uptimeMillis())
         currentInputConnection?.deleteSurroundingText(count, 0)
@@ -3893,6 +3973,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     override fun sendDownUpKeyEvents(keyEventCode: Int) {
         if (keyEventCode == KeyEvent.KEYCODE_DEL) {
             selfWriteCaret.noteWrite(-1, android.os.SystemClock.uptimeMillis())
+            // 终端影子账本：发退格 = 屏幕上最后入账的一个字符被删
+            terminalShadowTrim(1)
         }
         super.sendDownUpKeyEvents(keyEventCode)
     }
