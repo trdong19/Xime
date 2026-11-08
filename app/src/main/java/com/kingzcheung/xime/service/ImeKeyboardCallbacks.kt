@@ -71,12 +71,30 @@ internal fun rememberImeKeyboardCallbacks(
                     val text = adjustedCandidates[index]
                     val pendingEnglish = cs.pendingEnglishText
                     if (pendingEnglish.isNotEmpty()) {
-                        // 英文直接上屏模式：编码已逐字落盘，选中候选词时需回删屏上编码再提交候选词。
+                        // 英文候选点选：组合区承载下 commitText 自动整体替换 composing region
+                        //（零回删）；回退直传模式才需要回删屏上编码再提交候选词。
                         // 第 0 项即当前已键入文本本身（上屏确认），无需替换。
                         if (index == 0 && text == pendingEnglish) {
+                            // 定格组合区：字符保留在输入框，只清状态
+                            service.finishEnglishComposition()
                             service.candidateState.value = service.candidateState.value.copy(
                                 pendingEnglishText = "",
                                 associationCandidates = emptyList()
+                            )
+                        } else if (service.isEnglishComposing()) {
+                            // 先清编码记录（防其它路径重复处理），再整体替换组合区
+                            service.candidateState.value = service.candidateState.value.copy(
+                                pendingEnglishText = ""
+                            )
+                            service.commitText(text)
+                            service.markEnglishCompositionConsumed()
+                            service.candidateState.value = service.candidateState.value.copy(
+                                pendingEnglishText = "",
+                                associationCandidates = emptyList()
+                            )
+                            FileLogger.d(
+                                XimeInputMethodService.TAG,
+                                "english candidate replace: via composition, text=$text"
                             )
                         } else {
                             // 先清编码记录：commitTextSilently 的回删依据 pendingEnglish，
@@ -128,6 +146,8 @@ internal fun rememberImeKeyboardCallbacks(
                 // 清空英文联想候选，并结束英文输入态：pendingEnglish 清空后，
                 // 后续刷新不再触发联想异步回填（否则"清了又冒出来"，见
                 // ImeSessionController/updateUIWithResult 的在途回填校验）。
+                // 组合区激活时先定格保留字母（镜像清空但组合区悬空会让下个字母丢字）。
+                service.finishEnglishComposition()
                 service.candidateState.value = service.candidateState.value.copy(
                     associationCandidates = emptyList(),
                     pendingEnglishText = ""
@@ -141,6 +161,9 @@ internal fun rememberImeKeyboardCallbacks(
             onCommitText = { text -> service.textCommit.commitClipboardText(text) },
             onDeleteText = { count -> service.textCommit.deleteClipboardChars(count) },
             onHandwritingAutoCommit = { newTail, expectedTail ->
+                // 手写上屏（追加/替换尾部语义）：先定格英文组合区保留已敲字母，
+                // 防 commitText 整体替换掉组合区字母
+                service.finishEnglishComposition()
                 if (expectedTail.isEmpty()) {
                     service.commitTextSilently(newTail)
                     true
@@ -223,6 +246,9 @@ internal fun rememberImeKeyboardCallbacks(
                     // 立即提前启动麦克风录音（等 150ms 的话模型常驻时加载极快，
                     // preStarted 可能还没创建好就被 startRecording 跳过，导致开头丢失）
                     service.voiceRecognitionHandler.startDelayedPreStart(0)
+                    // 语音 partial 以 setComposingText 写输入框（自带组合区语义）：
+                    // 先定格英文组合区保留已敲字母，防语音文本整体替换掉字母
+                    service.finishEnglishComposition()
                     service.voiceRecognitionHandler.startRecognition()
                 }
             },
@@ -241,6 +267,8 @@ internal fun rememberImeKeyboardCallbacks(
                     )
                     service.voiceRecordingStarted = true
                     service.voiceRecognitionHandler.startDelayedPreStart(0)
+                    // 同上：先定格英文组合区（保留字母）再启动语音
+                    service.finishEnglishComposition()
                     service.voiceRecognitionHandler.startRecognition()
                 }
             },
@@ -435,8 +463,9 @@ internal fun rememberImeKeyboardCallbacks(
             onCommitCandidateBeforeModeChange = {
                 val cs = service.candidateState.value
                 if (cs.pendingEnglishText.isNotEmpty()) {
-                    // 英文直接上屏模式：编码字符已逐字落盘，切模式只需结束本轮输入（清状态），
+                    // 切模式：定格组合区字母（保留已敲字符），只结束本轮输入（清状态），
                     // 不可再 commitText 否则会重复输出整个词。
+                    service.finishEnglishComposition()
                     service.candidateState.value = cs.copy(
                         pendingEnglishText = "",
                         associationCandidates = emptyList()
@@ -522,9 +551,11 @@ internal fun rememberImeKeyboardCallbacks(
                 )
                 QuickSendFormEditTextHolder.editText = null
                 QuickSendFormCodeEditTextHolder.editText = null
-                // 清残留：拼音组合态 / 英文 pending 不随表单遗留到候选栏
+                // 清残留：拼音组合态 / 英文 pending 不随表单遗留到候选栏；
+                // 英文组合区定格保留字母（镜像清空后组合区悬空会让下个字母丢字）
                 service.mainHandler.post {
                     service.rimeEngine.clearComposition()
+                    service.finishEnglishComposition()
                     service.candidateState.value = service.candidateState.value.copy(
                         inputText = "", preeditText = "", pendingEnglishText = "",
                         candidates = emptyList(), candidateComments = emptyList(),

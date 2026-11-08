@@ -175,6 +175,9 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
     }
 
     internal fun deleteClipboardChars(count: Int) {
+        // 删除应覆盖刚敲的字母：先定格英文组合区（否则 deleteSurroundingText 只删
+        // 组合区之前的宿主文本，刚敲的字母删不到）
+        service.finishEnglishComposition()
         service.noteSelfWriteCaretDelta(-count)
         service.currentInputConnection?.deleteSurroundingText(count, 0)
     }

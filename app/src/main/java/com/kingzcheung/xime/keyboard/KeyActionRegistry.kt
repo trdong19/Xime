@@ -84,7 +84,10 @@ object KeyActionRegistry {
     private val byId = LinkedHashMap<String, Handler>()
 
     init {
-        register("commit", ActionDomain.SERVICE, GestureAction.COMMIT) { c, v -> c.service.commitText(v) }
+        register("commit", ActionDomain.SERVICE, GestureAction.COMMIT) { c, v ->
+            // 插入语义：走追加型上屏（定格英文组合区+清镜像，防整体替换丢已敲字母）
+            c.service.commitTextAppend(v)
+        }
         register("send_rime", ActionDomain.SERVICE, GestureAction.SEND_RIME) { c, v -> c.service.dispatchKey(v) }
         // command 由 UI 手势层按命令名白名单走按键路由；此处仅保留服务域兜底执行体
         register("command", ActionDomain.SERVICE, GestureAction.COMMAND) { c, v -> c.service.executeCommand(v) }

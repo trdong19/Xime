@@ -236,9 +236,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     QuickSendFormEditTextHolder.editText = null
                     QuickSendFormCodeEditTextHolder.editText = null
                     // 清残留：表单期间可能存在的拼音组合态 / 英文 pending，
-                    // 关表单后候选栏不应再显示它们
+                    // 关表单后候选栏不应再显示它们；英文组合区定格保留字母
+                    //（镜像清空后组合区悬空会让关表单后的敲字丢字母）
                     service.mainHandler.post {
                         service.rimeEngine.clearComposition()
+                        service.finishEnglishComposition()
                         service.candidateState.value = service.candidateState.value.copy(
                             inputText = "", preeditText = "", pendingEnglishText = "",
                             candidates = emptyList(), candidateComments = emptyList(),
@@ -338,14 +340,19 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         // 需在 clearInputStateForKeys() 之前记录（该函数会清空 preeditText/inputText）。
                         val pendingEnglish = candState.pendingEnglishText
                         if (pendingEnglish.isNotEmpty()) {
-                            // 直接上屏模式：英文编码已逐字落盘，"清输入态"需回删屏上对应字符；
-                            // 校验光标前文本一致才删除并记录撤回，否则只清状态不动已上屏文本。
+                            // 组合区承载：字母在 composing 区，setComposingText("") 原地删除（清空语义）；
+                            // 回退直传模式仍走前文校验回删（校验一致才删并记录撤回）。
                             val removed = withContext(Dispatchers.Main) {
-                                val ic = service.currentInputConnection ?: return@withContext false
-                                val before = runCatching {
-                                    ic.getTextBeforeCursor(pendingEnglish.length, 0)?.toString()
-                                }.getOrNull()
-                                before == pendingEnglish && ic.deleteSurroundingText(pendingEnglish.length, 0)
+                                if (service.isEnglishComposing()) {
+                                    service.discardEnglishComposition()
+                                    true
+                                } else {
+                                    val ic = service.currentInputConnection ?: return@withContext false
+                                    val before = runCatching {
+                                        ic.getTextBeforeCursor(pendingEnglish.length, 0)?.toString()
+                                    }.getOrNull()
+                                    before == pendingEnglish && ic.deleteSurroundingText(pendingEnglish.length, 0)
+                                }
                             }
                             if (removed) service.recordCleared(pendingEnglish)
                         } else {
@@ -446,6 +453,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     } else {
                         service.rimeEngine.clearComposition()
                         withContext(Dispatchers.Main) {
+                            // 英文组合区未定格时先定格（保留字母），防编辑器动作吞掉/替换组合文本
+                            service.finishEnglishComposition()
                             val imeOptions = service.currentInputEditorInfo?.imeOptions ?: 0
                             val action = imeOptions and EditorInfo.IME_MASK_ACTION
                             val noEnterAction = imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0
@@ -473,15 +482,21 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     } else {
                         service.rimeEngine.clearComposition()
                     }
-                    withContext(Dispatchers.Main) { service.sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER) }
+                    withContext(Dispatchers.Main) {
+                        // 英文组合区先定格（保留字母）再换行
+                        service.finishEnglishComposition()
+                        service.sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
+                    }
                     resetEnterLikeCandidates(state.currentSchemaId)
                 }
                 "space" -> {
                     val pendingEnglish = candState.pendingEnglishText
 
                     if (pendingEnglish.isNotEmpty()) {
-                        // 直接上屏模式：词已逐字落盘，此处只提交空格并结束本轮英文输入。
+                        // 词尾定格：先 finishComposingText 保留已敲字母（带组合区 commitText
+                        // 会把字母整体替换成空格，丢字），再上屏空格并结束本轮英文输入。
                         withContext(Dispatchers.Main) {
+                            service.finishEnglishComposition()
                             service.commitText(" ")
                             service.candidateState.value = service.candidateState.value.copy(
                                 pendingEnglishText = "",
@@ -573,7 +588,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }
                 "emoji" -> {
                     withContext(Dispatchers.Main) {
+                        // 追加语义：定格英文组合区+清镜像（防整体替换丢已敲字母）
+                        service.finishEnglishComposition()
                         service.commitText("😊")
+                        service.clearEnglishMirrorAfterAppend()
                     }
                 }
                 else -> {
@@ -587,7 +605,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         calculatorEngine = service.calculatorEngine,
                     )
                     if (routeResult is com.kingzcheung.xime.calculator.CalculatorRouteResult.Handled) {
-                        withContext(Dispatchers.Main) { service.commitText(routeResult.commitText) }
+                        withContext(Dispatchers.Main) {
+                            service.finishEnglishComposition()
+                            service.commitText(routeResult.commitText)
+                            service.clearEnglishMirrorAfterAppend()
+                        }
                         if (isNumberKeyboard) updateCalculatorCandidates()
                         needsUIUpdate = true
                         return@launch
@@ -635,7 +657,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     if ((state.isAsciiMode || pendingEnglish.isNotEmpty()) && !key.matches(Regex("[a-zA-Z]"))) {
                         val finalKey = key
                         withContext(Dispatchers.Main) {
-                            // 直接上屏模式：pendingEnglish 对应字符已逐字落盘，只提交增量键值。
+                            // 词尾定格：先 finishComposingText 保留已敲字母，再上屏标点/数字
+                            //（带组合区 commitText 会把字母整体替换成键值，丢字）。
+                            service.finishEnglishComposition()
                             service.commitText(finalKey)
                             service.candidateState.value = service.candidateState.value.copy(
                                 pendingEnglishText = "",
@@ -706,13 +730,19 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 } else {
                                     val committed = result.committedText
                                     if (state.isAsciiMode && committed.isNotEmpty() && result.inputText.isEmpty() && result.candidates.isEmpty()) {
-                                        val current = candState.pendingEnglishText
-                                        val newPending = current + committed
-                                        service.candidateState.value = service.candidateState.value.copy(pendingEnglishText = newPending)
-                                        // 直接上屏模式：只提交 Rime 返回的增量字符（如智能引号转换结果），
-                                        // 整段 pending 对应的文本已逐字上屏，不可重复提交。
+                                        val newPending = candState.pendingEnglishText + committed
+                                        // 英文组合区承载：整段 pending 写入 composing region（点选候选时
+                                        // commitText 自动整体替换，零回删）；宿主拒绝或内部输入态
+                                        // （搜索/面板/表单聚焦，文本经 commitTextSilently 重定向）时回退直传。
+                                        // 镜像更新与组合区写入同在主线程串行——防 onUpdateSelection
+                                        // 定格分支与本处镜像回写的跨线程竞态。
                                         withContext(Dispatchers.Main) {
-                                            service.commitText(committed)
+                                            if (service.writeEnglishComposition(newPending)) {
+                                                service.noteSelfWriteCaretDelta(committed.length)
+                                            } else {
+                                                service.commitText(committed)
+                                            }
+                                            service.candidateState.value = service.candidateState.value.copy(pendingEnglishText = newPending)
                                         }
                                         sendTransformedResult(result) { if (service.calculatorEngine.isActive()) updateCalculatorCandidates() }
                                     } else {
@@ -727,18 +757,22 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 if (!candState.isComposing || isShiftedChinese) {
                                                     if (isAscii) {
                                                         val charToCommit = if (isShifted) char.uppercase() else char.lowercase()
-                                                        val currentPending = candState.pendingEnglishText
-                                                        val newPending = currentPending + charToCommit
-                                                        // 英文直接上屏模式：字符不经 composing region，即输即落盘；
-                                                        // pendingEnglishText 仅作编码记录（供联想与选中候选后回删替换校验）。
+                                                        val newPending = candState.pendingEnglishText + charToCommit
+                                                        // 英文组合区承载：整段 pending 写入 composing region；
+                                                        // 宿主拒绝或内部输入态（搜索/面板/表单聚焦）时回退直传。
+                                                        // 镜像更新与组合区写入同在主线程串行（防定格分支竞态回写旧镜像）。
                                                         withContext(Dispatchers.Main) {
-                                                            service.commitText(charToCommit)
+                                                            if (service.writeEnglishComposition(newPending)) {
+                                                                service.noteSelfWriteCaretDelta(charToCommit.length)
+                                                            } else {
+                                                                service.commitText(charToCommit)
+                                                            }
+                                                            service.candidateState.value = service.candidateState.value.copy(
+                                                                pendingEnglishText = newPending,
+                                                                associationCandidates = emptyList(),
+                                                                englishReplaceSupported = service.englishCandidateReplaceSupported()
+                                                            )
                                                         }
-                                                        service.candidateState.value = service.candidateState.value.copy(
-                                                            pendingEnglishText = newPending,
-                                                            associationCandidates = emptyList(),
-                                                            englishReplaceSupported = service.supportsEnglishCandidateReplace()
-                                                        )
                                                         needsUIUpdate = true
                                     } else {
                                         committedText = char
@@ -827,7 +861,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             FileLogger.i(XimeInputMethodService.TAG, "keyRouter UI refresh: ascii ${service.uiState.value.isAsciiMode}->$capturedIsAscii")
                         }
                         service.uiState.value = service.uiState.value.copy(isAsciiMode = capturedIsAscii)
-                        if (pendingEnglish.isNotEmpty() && !secret && service.supportsEnglishCandidateReplace()) {
+                        if (pendingEnglish.isNotEmpty() && !secret && service.englishCandidateReplaceSupported()) {
                             service.serviceScope.launch {
                                 val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
                                 withContext(Dispatchers.Main) {
@@ -1044,7 +1078,26 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val layoutState = service.keyboardViewModel.keyboardState.value
         if (layoutState is KeyboardLayoutState.Number || layoutState is KeyboardLayoutState.Symbol) {
             withContext(Dispatchers.Main) {
-                service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                if (service.isEnglishComposing()) {
+                    // 数字/符号面板不清 pendingEnglish：退格须组合区感知（镜像同步缩删，
+                    // 否则裸 DEL 删组合区字符后镜像失同步，下个字母把"已删"字符写回）
+                    val newPending = candState.pendingEnglishText.dropLast(1)
+                    when {
+                        newPending.isNotEmpty() && service.writeEnglishComposition(newPending) ->
+                            service.noteSelfWriteCaretDelta(-1)
+                        newPending.isEmpty() -> service.discardEnglishComposition()
+                        else -> service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                    }
+                    service.candidateState.value = service.candidateState.value.copy(
+                        pendingEnglishText = newPending,
+                        candidates = emptyList(),
+                        candidateComments = emptyList(),
+                        associationCandidates = emptyList(),
+                        candidateActions = emptyList()
+                    )
+                } else {
+                    service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                }
             }
         } else when {
             // 1. 英文待处理文本：逐个删除字符，重新加载联想
@@ -1052,7 +1105,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 val newPending = candState.pendingEnglishText.dropLast(1)
                 if (newPending.isNotEmpty()) {
                     withContext(Dispatchers.Main) {
-                        service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                        if (service.isEnglishComposing()) {
+                            // 组合区承载：重写组合区为去掉末字符的镜像（原地缩删，不依赖宿主 DEL 语义）；
+                            // 写失败（中途切到内部输入态等）回退 DEL 并跳过位移登记（防悬挂预期误吞用户移动）
+                            if (service.writeEnglishComposition(newPending)) {
+                                service.noteSelfWriteCaretDelta(-1)
+                            } else {
+                                service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                            }
+                        } else {
+                            service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                        }
                         service.candidateState.value = service.candidateState.value.copy(
                             pendingEnglishText = newPending,
                             candidates = emptyList(),
@@ -1061,7 +1124,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             candidateActions = emptyList()
                         )
                     }
-                    if (!service.isSecretEditor() && service.supportsEnglishCandidateReplace()) {
+                    if (!service.isSecretEditor() && service.englishCandidateReplaceSupported()) {
                         service.serviceScope.launch {
                             val candidates = service.predictionManager.getEnglishAssociations(newPending, PredictionManager.MAX_ASSOCIATION_COUNT)
                             withContext(Dispatchers.Main) {
@@ -1071,7 +1134,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                        if (service.isEnglishComposing()) {
+                            // 删空：原地清除组合区
+                            service.discardEnglishComposition()
+                        } else {
+                            service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                        }
                         service.candidateState.value = service.candidateState.value.copy(
                             pendingEnglishText = "",
                             candidates = emptyList(),
@@ -1320,6 +1388,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 // 编码已随候选整串上屏：退出编码编辑态（光标复位到末尾语义）
                 service.editingCaretPos = -1
                 service.editingCaretInput = ""
+                // 英文组合区若激活：已被 commitText 整体替换（候选词覆盖已敲字母），
+                // 复位镜像与标记，防止下个字母把旧字母再插一遍
+                service.markEnglishCompositionConsumed()
                 service.candidateState.value = service.candidateState.value.copy(
                     inputText = "",
                     preeditText = "",
@@ -1328,7 +1399,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     isComposing = false,
                     hasNextPage = false,
                     hasPrevPage = false,
-                    isShowingRecentClipboard = false
+                    isShowingRecentClipboard = false,
+                    pendingEnglishText = ""
                 )
                 service.uiState.value = service.uiState.value.copy(
                     t9ResetSignal = service.uiState.value.t9ResetSignal + 1,
@@ -1387,6 +1459,22 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             service.candidateState.value = service.candidateState.value.copy(
                 pendingEnglishText = ""
             )
+            if (service.isEnglishComposing()) {
+                // 组合区承载：commitText 自动整体替换 composing region（敲 cl 点「claude code」
+                // → 上屏 claude code），零回删——WebView 等拿不到前文的输入框也生效
+                //（替换走组合区，不依赖读前文）。
+                withContext(Dispatchers.Main) {
+                    service.commitText(text)
+                    service.markEnglishCompositionConsumed()
+                    service.candidateState.value = service.candidateState.value.copy(
+                        candidates = emptyList(),
+                        candidateComments = emptyList(),
+                        candidateActions = emptyList(),
+                        associationCandidates = emptyList()
+                    )
+                }
+                return
+            }
             val replaced = withContext(Dispatchers.Main) {
                 service.replaceBeforeCursor(pending, text)
             }
@@ -1408,6 +1496,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             }
         }
         withContext(Dispatchers.Main) {
+            // 非前缀候选（内容命中等）：追加语义——组合区激活时先定格（保留字母）再上屏，
+            // 否则 commitText 会把已敲字母整体替换成候选文本
+            service.finishEnglishComposition()
             service.commitText(text)
             service.candidateState.value = service.candidateState.value.copy(
                 inputText = "",
@@ -1458,6 +1549,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 输入框模式清 composing 区；T9 方案重置左侧候选区（其他键盘无左栏，跳过）。
      */
     private suspend fun clearInputStateForKeys() {
+        // clear_composition 语义 = 清空输入态：英文组合区字符一并原地删除
+        withContext(Dispatchers.Main) {
+            if (service.isEnglishComposing()) service.discardEnglishComposition()
+        }
         service.calculatorEngine.clear()
         updateCalculatorCandidates()
         service.t9PartialSegments.clear()
@@ -1684,6 +1779,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }
                 withContext(Dispatchers.Main) {
                     service.commitText(committedText)
+                    // 英文组合区若激活：已被整体替换，复位标记与镜像（防下个字母重插旧字母）
+                    service.markEnglishCompositionConsumed()
                     service.candidateState.value = service.candidateState.value.copy(
                         inputText = "",
                         preeditText = "",
@@ -1695,7 +1792,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         isShowingRecentClipboard = false,
                         expandedCandidates = emptyList(),
                         expandedActions = emptyList(),
-                        expandedHostCount = 0
+                        expandedHostCount = 0,
+                        pendingEnglishText = ""
                     )
                 }
             } else {

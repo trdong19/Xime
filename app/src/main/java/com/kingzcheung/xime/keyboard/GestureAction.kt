@@ -17,6 +17,15 @@ interface ActionExecutor {
     fun commitText(text: String)
 
     /**
+     * 追加型上屏（手势/动作语义的"插入"）：先定格英文组合区并清输入镜像再上屏，
+     * 防止带组合区 commitText 把已敲字母整体替换掉。默认退化为 [commitText]。
+     * @param text 要上屏的文本内容
+     */
+    fun commitTextAppend(text: String) {
+        commitText(text)
+    }
+
+    /**
      * 执行系统编辑器菜单动作。
      * @param actionId Android 内置动作 ID，如 [android.R.id.selectAll]、[android.R.id.copy]、
      *                 [android.R.id.cut]、[android.R.id.paste]、[android.R.id.undo]

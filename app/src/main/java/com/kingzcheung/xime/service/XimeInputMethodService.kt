@@ -1164,6 +1164,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val pending = candidateState.value
         if (pending.isComposing || pending.inputText.isNotEmpty() || pending.pendingEnglishText.isNotEmpty()) {
             rimeEngine.clearComposition()
+            // 英文组合区定格保留字母（面板会接管输入，镜像随之清空——
+            // 不定格则组合区悬空，关面板后敲字会丢字母）
+            finishEnglishComposition()
             endComposingInputBox()
             candidateState.value = candidateState.value.copy(
                 candidates = emptyList(),
@@ -1318,7 +1321,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         toolPanelSelection?.let { (start, end) ->
             runCatching { ic.setSelection(start, end) }
         }
+        // 追加/替换选区语义：定格英文组合区+清镜像（防整体替换丢已敲字母）
+        finishEnglishComposition()
         ic.commitText(text, 1)
+        clearEnglishMirrorAfterAppend()
         if (isChineseMode) {
             predictionManager.appendCommittedText(text)
             predictionManager.recordInput(text)
@@ -2295,7 +2301,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     override fun repeatLastInput() {
         val lastText = predictionManager.lastCommittedText
         if (lastText.isNotEmpty()) {
+            // 追加语义：定格英文组合区+清镜像后上屏（防整体替换丢已敲字母）
+            finishEnglishComposition()
             currentInputConnection?.commitText(lastText, 1)
+            clearEnglishMirrorAfterAppend()
         }
     }
 
@@ -2325,6 +2334,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // （无 composing 时会在光标处插入空串，选中文字时等于删除选区）。
         if (!restarting) {
             inputBoxComposingActive = false
+            // 英文组合区标记随编辑框失效（宿主已定稿/丢弃旧组合区）；
+            // 拒绝标记也复位——新编辑框重新尝试组合区承载。
+            englishComposingActive = false
+            englishCompositionRejected = false
+        } else {
+            // 同编辑框重启：组合区可能仍存活于宿主（未被定稿）——定格保留字符
+            //（幂等安全），防止镜像被 CandidateState() 清掉后下个字母整体替换存活组合区丢字母
+            finishEnglishComposition()
         }
 
         predictionManager.clearCommittedText()
@@ -2588,6 +2605,21 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd
                 )
             ) {
+                return
+            }
+            if (englishComposingActive) {
+                // 英文组合区：用户把光标移出组合区 → 定格（字符保留，Gboard 同款"移光标即定稿"），
+                // 只清输入态。不可走 breakPendingCompositionForCaretMove——那是编码"丢弃"语义
+                // （setComposingText("")），会把已敲英文字母一并删掉。
+                FileLogger.i(TAG, "onUpdateSelection: 英文组合区定格（光标移动）")
+                finishEnglishComposition()
+                candidateState.value = candidateState.value.copy(
+                    candidates = emptyList(),
+                    candidateComments = emptyList(),
+                    associationCandidates = emptyList(),
+                    candidateActions = emptyList(),
+                    pendingEnglishText = ""
+                )
                 return
             }
             if (!hasPendingComposition()) return
@@ -2908,6 +2940,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             englishReplaceSupported = true,
             candidateActions = emptyList()
         )
+        // 英文组合区随会话结束：定格保留字符（finishComposingText 无副作用），复位标记
+        finishEnglishComposition()
         endComposingInputBox()
     }
 
@@ -2945,6 +2979,105 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     internal fun isSecretEditor(): Boolean = editorSecret
 
+    // ── 英文组合区承载（Gboard 同款架构，2026-11-08）────────────
+    // 英文模式字母不再逐字 commitText 定格，而是整段暂存于输入框 composing region
+    // （pendingEnglishText 为镜像）。点选快捷发送/联想候选时 commitText 会自动整体
+    // 替换组合区（安卓标准语义，同中文选词），零回删——WebView 等拿不到前文的
+    // 输入框也生效。词尾（空格/标点/回车/切模式）先 finishComposingText 定格保留字母。
+    @Volatile
+    private var englishComposingActive = false
+
+    /** 宿主拒绝组合区写入（setComposingText 失败）→ 本输入会话回退英文直传。 */
+    @Volatile
+    private var englishCompositionRejected = false
+
+    internal fun isEnglishComposing(): Boolean = englishComposingActive
+
+    /**
+     * 英文组合区承载是否可用：秘密输入框（终端 TYPE_NULL 无文本渲染概念/密码框）
+     * 与内部输入态（剪贴板搜索/工具面板/快捷发送表单——文本经 commitTextSilently
+     * 重定向进内部编辑器，写宿主组合区会污染宿主）一律直传。
+     */
+    internal fun englishCompositionAllowed(): Boolean {
+        if (editorSecret) return false
+        if (englishCompositionRejected) return false
+        if (keyboardViewModel.clipboardSearchFocused.value) return false
+        val ui = uiState.value
+        if (ui.toolPanelInputFocused || ui.showQuickSendForm) return false
+        return true
+    }
+
+    /**
+     * 整段写入英文组合区（镜像 [text] = pendingEnglishText），光标置于末尾。
+     * 宿主拒绝时标记 [englishCompositionRejected] 并返回 false，调用方回退直传。
+     * 需在主线程调用。
+     */
+    internal fun writeEnglishComposition(text: String): Boolean {
+        if (text.isEmpty()) return false
+        if (!englishCompositionAllowed()) return false
+        val ic = currentInputConnection ?: return false
+        val ok = runCatching { ic.setComposingText(text, 1) }.getOrDefault(false)
+        if (!ok) {
+            englishCompositionRejected = true
+            englishComposingActive = false
+            return false
+        }
+        englishComposingActive = true
+        return true
+    }
+
+    /** 定格英文组合区：字符保留为已上屏文本（词尾/切模式/粘贴前封口）。需在主线程调用。 */
+    internal fun finishEnglishComposition() {
+        if (!englishComposingActive) return
+        runCatching { currentInputConnection?.finishComposingText() }
+        englishComposingActive = false
+    }
+
+    /**
+     * 组合区已被 commitText 整体替换（宿主已定稿为新文本）：只复位激活标记，不动 IC。
+     * 替换路径（引擎候选/快捷发送/联想点选）上屏后必须调用，否则标记悬空会导致
+     * 下一个字母 setComposingText 在已定稿文本后再插一遍旧字母。
+     * 需在主线程调用。
+     */
+    internal fun markEnglishCompositionConsumed() {
+        englishComposingActive = false
+    }
+
+    /**
+     * 追加型上屏后的镜像收尾：英文组合区已定格/文本已上屏，清 pendingEnglishText
+     * 与联想（不清会导致下个字母 setComposingText 把旧字母整段重插）。
+     * 需在主线程调用。
+     */
+    internal fun clearEnglishMirrorAfterAppend() {
+        val cs = candidateState.value
+        if (cs.pendingEnglishText.isNotEmpty() || englishComposingActive) {
+            englishComposingActive = false
+            candidateState.value = cs.copy(
+                pendingEnglishText = "",
+                associationCandidates = emptyList()
+            )
+        }
+    }
+
+    /** 追加型上屏（手势/动作语义的"插入"）：定格组合区+清镜像后上屏。需在主线程调用。 */
+    override fun commitTextAppend(text: String) {
+        finishEnglishComposition()
+        commitText(text)
+        clearEnglishMirrorAfterAppend()
+    }
+
+    /** 丢弃英文组合区字符（clear_all 清输入态）：setComposingText("") 原地删除。需在主线程调用。 */
+    internal fun discardEnglishComposition() {
+        if (!englishComposingActive) return
+        currentInputConnection?.let {
+            runCatching {
+                it.setComposingText("", 0)
+                it.finishComposingText()
+            }
+        }
+        englishComposingActive = false
+    }
+
     /**
      * 当前宿主是否支持英文候选的"回删替换"机制。
      *
@@ -2956,6 +3089,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val ic = currentInputConnection ?: return false
         return runCatching { ic.getTextBeforeCursor(1, 0) != null }.getOrDefault(false)
     }
+
+    /**
+     * 英文候选替换总能力：组合区承载优先（宿主无关——commitText 整体替换组合区
+     * 不依赖读前文），回退直传模式按旧探针判定。
+     * 联想候选的显示/回填闸门统一用本函数（WebView 类输入框拿不到前文但组合区可用，
+     * 旧探针会误杀联想）。
+     */
+    internal fun englishCandidateReplaceSupported(): Boolean =
+        englishCompositionAllowed() || supportsEnglishCandidateReplace()
 
     override fun onDestroy() {
         super.onDestroy()
@@ -3165,7 +3307,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * （typing-stats 过滤，用户反馈"一天一万多字"的主要来源即长文本粘贴）。
      */
     internal fun commitPastedText(text: String) {
+        // 粘贴 = 追加语义 + 本轮终结：先定格英文组合区（带组合区 commitText 会整体替换，
+        // 丢已敲字母），上屏后清镜像（不清则下个字母把旧字母整段重插）。
+        finishEnglishComposition()
         commitTextAndPredict(text, isPaste = true)
+        clearEnglishMirrorAfterAppend()
     }
 
     private fun commitTextAndPredict(text: String, isPaste: Boolean) {
@@ -3243,8 +3389,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 悬浮键盘归位到搜索界面上方（搜索界面占底部 280dp，卡片浮在其上可拖动）
         uiState.value = uiState.value.copy(floatingOffsetY = 320)
         mainHandler.post {
-            runCatching { currentInputConnection?.finishComposingText() }
+            // 英文组合区先定格（字符保留），再走中文 composing 清理；
+            // 并清英文镜像——搜索期间字母经 commitTextSilently 重定向进搜索词，
+            // 不进镜像，残留 pending 会在退出搜索后把旧字母整段重插。
+            finishEnglishComposition()
             endComposingInputBox()
+            candidateState.value = candidateState.value.copy(
+                pendingEnglishText = "",
+                associationCandidates = emptyList()
+            )
             updateUI()
         }
     }
@@ -3255,6 +3408,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             searchRestoreFloating = false
             schemaController.toggleFloatingMode(false)
         }
+        // 退出搜索 = 本轮终结：定格+清镜像（搜索期间镜像被清，此处兜底重申）
+        finishEnglishComposition()
+        clearEnglishMirrorAfterAppend()
     }
 
     internal fun commitTextSilently(text: String, isPaste: Boolean = false) {
